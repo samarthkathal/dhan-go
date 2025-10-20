@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/samarthkathal/dhan-go/client"
+	"github.com/samarthkathal/dhan-go/rest/client"
 )
 
 func main() {

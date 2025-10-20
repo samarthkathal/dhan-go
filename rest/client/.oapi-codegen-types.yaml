@@ -1,0 +1,6 @@
+package: client
+output: rest/client/types.go
+generate:
+  models: true
+output-options:
+  skip-prune: true

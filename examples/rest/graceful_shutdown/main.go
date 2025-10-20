@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/samarthkathal/dhan-go/client"
+	"github.com/samarthkathal/dhan-go/rest/client"
 )
 
 func main() {

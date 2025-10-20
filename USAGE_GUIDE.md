@@ -41,7 +41,7 @@ import (
     "log"
     "net/http"
 
-    "github.com/samarthkathal/dhan-go/client"
+    "github.com/samarthkathal/dhan-go/rest/client"
 )
 
 func main() {
@@ -90,7 +90,7 @@ The SDK uses [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) to gen
 go generate ./...
 ```
 
-This reads `openapi.json` and generates `client/generated.go` with:
+This reads `openapi.json` and generates `rest/client/client.go` with:
 - All type definitions (request/response models)
 - Client with all API methods
 - Type-safe request builders

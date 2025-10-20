@@ -31,7 +31,7 @@ import (
     "log"
     "net/http"
 
-    "github.com/samarthkathal/dhan-go/client"
+    "github.com/samarthkathal/dhan-go/rest/client"
 )
 
 func main() {
@@ -158,9 +158,9 @@ All 31 Dhan v2 REST API endpoints are available:
                 │
                 ▼
 ┌─────────────────────────────────────────────────┐
-│  Generated Client (client/generated.go)         │
-│  - 31 API methods                               │
-│  - Type-safe request/response                   │
+│  Generated Client (rest/client/)                │
+│  - client.go: 31 API methods                    │
+│  - types.go: Type-safe request/response         │
 │  - Context support                              │
 └───────────────┬─────────────────────────────────┘
                 │
@@ -186,26 +186,41 @@ All 31 Dhan v2 REST API endpoints are available:
 
 ```
 dhan-go/
-├── client/
-│   └── generated.go          # 8,941 lines - Auto-generated from OpenAPI
+├── rest/
+│   └── client/
+│       └── client.go         # ~8,933 lines - Generated client & types
+├── websocket/
+│   ├── actors/               # Actor framework for WebSocket management
+│   ├── marketfeed/           # Market feed WebSocket client
+│   ├── orderupdate/          # Order update WebSocket client
+│   ├── types/                # WebSocket type definitions
+│   └── middleware/           # WebSocket-specific middleware
 ├── utils/
-│   ├── transport.go          # ~230 lines - Middleware (RoundTrippers)
-│   └── config.go             # ~130 lines - HTTP client presets
+│   ├── transport.go          # ~230 lines - HTTP middleware (RoundTrippers)
+│   ├── config.go             # ~130 lines - HTTP client presets
+│   ├── ws_*.go               # WebSocket utilities
+│   └── rate_limiter.go       # Rate limiting utilities
 ├── examples/
-│   ├── 01_basic/             # Basic usage
-│   ├── 02_with_middleware/   # Production middleware setup
-│   ├── 03_graceful_shutdown/ # Context cancellation pattern
-│   └── 04_all_features/      # Complete production example
+│   ├── rest/
+│   │   ├── basic/            # Basic REST API usage
+│   │   ├── middleware/       # Production middleware setup
+│   │   ├── graceful_shutdown/ # Context cancellation pattern
+│   │   └── all_features/     # Complete production example
+│   ├── websocket/
+│   │   ├── orderupdate/      # WebSocket order updates
+│   │   └── marketfeed/       # WebSocket market feed
+│   └── webhook/
+│       └── postback/         # Webhook postback handler
 ├── openapi.json              # OpenAPI 3.0.1 spec
-├── tools.go                  # Code generation directive
+├── tools.go                  # Code generation directives
 ├── go.mod
 ├── README.md                 # This file
 ├── USAGE_GUIDE.md            # Complete usage guide
 └── CODE_GENERATION.md        # Code generation SOP
 ```
 
-**Total custom code**: ~360 lines (utils/)
-**Generated code**: ~8,941 lines (client/)
+**Total custom code**: ~500 lines (utils/)
+**Generated code**: ~8,941 lines (rest/client/)
 
 ## Documentation
 
@@ -217,14 +232,25 @@ dhan-go/
 
 All examples are in the `examples/` directory:
 
-1. **[Basic Usage](examples/01_basic/main.go)** - Simple authentication and API calls
-2. **[With Middleware](examples/02_with_middleware/main.go)** - Rate limiting, logging, metrics, recovery
-3. **[Graceful Shutdown](examples/03_graceful_shutdown/main.go)** - Context cancellation pattern
-4. **[All Features](examples/04_all_features/main.go)** - Complete production setup
+### REST API Examples
+
+1. **[Basic Usage](examples/rest/basic/main.go)** - Simple authentication and API calls
+2. **[With Middleware](examples/rest/middleware/main.go)** - Rate limiting, logging, metrics, recovery
+3. **[Graceful Shutdown](examples/rest/graceful_shutdown/main.go)** - Context cancellation pattern
+4. **[All Features](examples/rest/all_features/main.go)** - Complete production setup
+
+### WebSocket Examples
+
+5. **[Order Updates](examples/websocket/orderupdate/main.go)** - Real-time order update notifications
+6. **[Market Feed](examples/websocket/marketfeed/main.go)** - Live market data streaming
+
+### Webhook Examples
+
+7. **[Postback Handler](examples/webhook/postback/main.go)** - HTTP webhook receiver for Dhan events
 
 Run any example:
 ```bash
-cd examples/01_basic
+cd examples/rest/basic
 go run main.go
 ```
 
@@ -356,10 +382,10 @@ dhanClient.OptionchainWithResponse(ctx, nil, optionReq)
 
 ```bash
 # List all methods
-grep "func (c \*ClientWithResponses)" client/generated.go
+grep "func (c \*ClientWithResponses)" rest/client/client.go
 
 # Search for specific endpoint
-grep -i "placeorder" client/generated.go
+grep -i "placeorder" rest/client/client.go
 ```
 
 ## Best Practices
