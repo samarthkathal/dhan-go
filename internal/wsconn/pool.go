@@ -7,7 +7,6 @@ import (
 
 	"github.com/samarthkathal/dhan-go/internal/limiter"
 	"github.com/samarthkathal/dhan-go/middleware"
-	"github.com/samarthkathal/dhan-go/metrics"
 	"github.com/samarthkathal/dhan-go/pool"
 )
 
@@ -17,7 +16,6 @@ type Pool struct {
 	config         *WebSocketConfig
 	messageHandler middleware.WSMessageHandler
 	middleware     middleware.WSMiddleware
-	metrics        *metrics.WSCollector
 	bufferPool     *pool.BufferPool
 	limiter        *limiter.ConnectionLimiter
 
@@ -34,7 +32,6 @@ type PoolConfig struct {
 	Config         *WebSocketConfig
 	MessageHandler middleware.WSMessageHandler
 	Middleware     middleware.WSMiddleware
-	Metrics        *metrics.WSCollector
 	BufferPool     *pool.BufferPool
 	Limiter        *limiter.ConnectionLimiter
 }
@@ -56,7 +53,6 @@ func NewPool(cfg PoolConfig) *Pool {
 		config:         cfg.Config,
 		messageHandler: cfg.MessageHandler,
 		middleware:     cfg.Middleware,
-		metrics:        cfg.Metrics,
 		bufferPool:     cfg.BufferPool,
 		limiter:        cfg.Limiter,
 		connections:    make(map[string]*Connection),
@@ -94,7 +90,6 @@ func (p *Pool) GetOrCreateConnection(ctx context.Context) (*Connection, error) {
 		Config:         p.config,
 		MessageHandler: p.messageHandler,
 		Middleware:     p.middleware,
-		Metrics:        p.metrics,
 		BufferPool:     p.bufferPool,
 		Limiter:        p.limiter,
 	})
@@ -207,7 +202,6 @@ func (p *Pool) Subscribe(ctx context.Context, instruments []string, subscribeMsg
 				Config:         p.config,
 				MessageHandler: p.messageHandler,
 				Middleware:     p.middleware,
-				Metrics:        p.metrics,
 				BufferPool:     p.bufferPool,
 				Limiter:        p.limiter,
 			})
