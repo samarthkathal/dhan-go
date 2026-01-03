@@ -24,7 +24,7 @@ The Dhan Go SDK uses [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen
 - Type-safe request builders
 - Response wrapper types
 
-**File**: `client/generated.go` (~8,941 lines)
+**File**: `rest/client/client.go` (~8,933 lines) - All types and client methods
 
 **Source**: `openapi.json` (Dhan v2 OpenAPI spec)
 
@@ -62,7 +62,7 @@ This command:
 1. Reads `tools.go`
 2. Downloads oapi-codegen v2 (if not cached)
 3. Reads `openapi.json`
-4. Generates `client/generated.go`
+4. Generates `rest/client/client.go` (types + client methods)
 
 **Expected output:**
 ```
@@ -83,17 +83,17 @@ Should complete without errors.
 ### Step 3: Run Examples
 
 ```bash
-# Test basic example compiles
-cd examples/01_basic
+# Test REST examples compile
+cd examples/rest/basic
 go build .
 
-cd ../02_with_middleware
+cd ../middleware
 go build .
 
-cd ../03_graceful_shutdown
+cd ../graceful_shutdown
 go build .
 
-cd ../04_all_features
+cd ../all_features
 go build .
 ```
 
@@ -183,8 +183,8 @@ go generate ./...
 ### 2. File Generated
 
 ```bash
-ls -lh client/generated.go
-# Should show file exists (~500KB+)
+ls -lh rest/client/client.go
+# Should show file exists (~300KB+)
 ```
 
 ### 3. Code Compiles
@@ -221,16 +221,17 @@ go test ./...
 
 ```bash
 # Count generated methods (should be ~31 endpoints)
-grep -c "WithResponse(ctx context.Context" client/generated.go
+grep -c "WithResponse(ctx context.Context" rest/client/client.go
 ```
 
 ### 8. Spot Check
 
-Open `client/generated.go` and verify:
+Open `rest/client/client.go` and verify:
 - Package declaration: `package client`
 - Imports look correct
 - No obvious syntax errors
 - Methods exist (e.g., `GetpositionsWithResponse`)
+- Types are properly defined
 
 ---
 
@@ -311,7 +312,7 @@ If invalid, fix JSON syntax and regenerate.
 Located in `tools.go`:
 
 ```go
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest -generate types,skip-prune,client -package client -response-type-suffix=Result -o client/generated.go openapi.json
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest -generate types,skip-prune,client -package client -response-type-suffix=Result -o rest/client/client.go openapi.json
 ```
 
 **Breakdown:**
@@ -331,8 +332,8 @@ Located in `tools.go`:
   - Append "Result" to response wrapper types
   - Prevents naming conflicts (e.g., `GetpositionsResult` vs `Position` model)
 
-- `-o client/generated.go`
-  - Output file
+- `-o rest/client/client.go`
+  - Output file location
 
 - `openapi.json`
   - Input OpenAPI specification
@@ -422,7 +423,7 @@ func WithBaseURL(baseURL string) ClientOption {
 
 ### Making Changes
 
-1. **Don't edit `client/generated.go`** - It gets overwritten!
+1. **Don't edit `rest/client/client.go`** - It gets overwritten!
 2. **Do edit**:
    - `utils/*.go` - Custom utilities
    - `examples/*/main.go` - Examples
@@ -456,7 +457,7 @@ done
 git status
 
 # If generated code changed:
-git diff client/generated.go
+git diff rest/client/
 
 # Add files
 git add .
@@ -497,13 +498,16 @@ git commit -m "Regenerate client from updated OpenAPI spec"
 go generate ./...
 
 # Check generated file
-wc -l client/generated.go
+wc -l rest/client/client.go
 
 # List all API methods
-grep "WithResponse(ctx context.Context" client/generated.go
+grep "WithResponse(ctx context.Context" rest/client/client.go
 
 # Find specific method
-grep -i "placeorder" client/generated.go
+grep -i "placeorder" rest/client/client.go
+
+# Check types
+grep "^type.*struct" rest/client/client.go
 
 # Validate OpenAPI spec
 python3 -m json.tool openapi.json > /dev/null
@@ -517,7 +521,7 @@ go build ./...
 
 - `tools.go` - Generation directive
 - `openapi.json` - OpenAPI specification (input)
-- `client/generated.go` - Generated client (output)
+- `rest/client/client.go` - Generated client & types (output)
 - `go.mod` - Dependencies (oapi-codegen)
 
 ### External Links
@@ -540,10 +544,10 @@ go build ./...
 │  Test:         go test ./...                           │
 │                                                        │
 │  Input:        openapi.json                            │
-│  Output:       client/generated.go                     │
+│  Output:       rest/client/client.go                   │
 │  Config:       tools.go                                │
 │                                                        │
-│  DON'T EDIT:   client/generated.go                     │
+│  DON'T EDIT:   rest/client/client.go (generated)       │
 │  DO EDIT:      utils/*.go, examples/*, docs/*.md       │
 │                                                        │
 └────────────────────────────────────────────────────────┘

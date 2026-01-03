@@ -1,4 +1,4 @@
-package utils
+package middleware
 
 import (
 	"context"
@@ -26,6 +26,11 @@ func ChainRoundTrippers(transport http.RoundTripper, wrappers ...func(http.Round
 		result = wrappers[i](result)
 	}
 	return result
+}
+
+// HTTPMetricsCollector defines the interface for collecting HTTP metrics
+type HTTPMetricsCollector interface {
+	RecordRequest(method, path string, statusCode int, duration time.Duration, err error)
 }
 
 // RateLimitRoundTripper implements token bucket rate limiting
@@ -109,7 +114,7 @@ func LoggingRoundTripper(logger *log.Logger) func(http.RoundTripper) http.RoundT
 }
 
 // MetricsRoundTripper collects request metrics
-func MetricsRoundTripper(collector *MetricsCollector) func(http.RoundTripper) http.RoundTripper {
+func MetricsRoundTripper(collector HTTPMetricsCollector) func(http.RoundTripper) http.RoundTripper {
 	return func(next http.RoundTripper) http.RoundTripper {
 		return RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 			start := time.Now()
@@ -128,84 +133,6 @@ func MetricsRoundTripper(collector *MetricsCollector) func(http.RoundTripper) ht
 			return resp, err
 		})
 	}
-}
-
-// MetricsCollector collects HTTP request metrics
-type MetricsCollector struct {
-	mu               sync.RWMutex
-	requestCounts    map[string]int64
-	requestDurations map[string]int64 // in milliseconds
-	errorCounts      map[string]int64
-	statusCodes      map[int]int64
-}
-
-func NewMetricsCollector() *MetricsCollector {
-	return &MetricsCollector{
-		requestCounts:    make(map[string]int64),
-		requestDurations: make(map[string]int64),
-		errorCounts:      make(map[string]int64),
-		statusCodes:      make(map[int]int64),
-	}
-}
-
-func (m *MetricsCollector) RecordRequest(method, path string, statusCode int, duration time.Duration, err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	endpoint := fmt.Sprintf("%s %s", method, path)
-	m.requestCounts[endpoint]++
-	m.requestDurations[endpoint] += duration.Milliseconds()
-
-	if err != nil {
-		m.errorCounts[endpoint]++
-	}
-
-	if statusCode > 0 {
-		m.statusCodes[statusCode]++
-	}
-}
-
-func (m *MetricsCollector) GetMetrics() map[string]interface{} {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	metrics := make(map[string]interface{})
-	metrics["request_counts"] = copyMap(m.requestCounts)
-	metrics["request_durations_ms"] = copyMap(m.requestDurations)
-	metrics["error_counts"] = copyMap(m.errorCounts)
-	metrics["status_codes"] = copyMapInt(m.statusCodes)
-
-	// Calculate total requests
-	var totalRequests int64
-	for _, count := range m.requestCounts {
-		totalRequests += count
-	}
-	metrics["total_requests"] = totalRequests
-
-	// Calculate total errors
-	var totalErrors int64
-	for _, count := range m.errorCounts {
-		totalErrors += count
-	}
-	metrics["total_errors"] = totalErrors
-
-	return metrics
-}
-
-func copyMap(m map[string]int64) map[string]int64 {
-	result := make(map[string]int64, len(m))
-	for k, v := range m {
-		result[k] = v
-	}
-	return result
-}
-
-func copyMapInt(m map[int]int64) map[int]int64 {
-	result := make(map[int]int64, len(m))
-	for k, v := range m {
-		result[k] = v
-	}
-	return result
 }
 
 // RecoveryRoundTripper recovers from panics in HTTP requests

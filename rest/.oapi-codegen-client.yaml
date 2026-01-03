@@ -1,0 +1,9 @@
+package: client
+output: rest/client/client.go
+generate:
+  client: true
+output-options:
+  skip-prune: true
+  skip-fmt: false
+compatibility:
+  always-prefix-enum-values: false
