@@ -2,7 +2,6 @@ package marketfeed
 
 import (
 	"github.com/samarthkathal/dhan-go/middleware"
-	"github.com/samarthkathal/dhan-go/metrics"
 )
 
 // PooledOption is a functional option for configuring the pooled market feed client
@@ -12,13 +11,6 @@ type PooledOption func(*PooledClient)
 func WithPooledConfig(config *WebSocketConfig) PooledOption {
 	return func(c *PooledClient) {
 		c.config = config
-	}
-}
-
-// WithPooledMetrics sets a custom metrics collector for the pooled client
-func WithPooledMetrics(collector *metrics.WSCollector) PooledOption {
-	return func(c *PooledClient) {
-		c.metrics = collector
 	}
 }
 
@@ -78,13 +70,6 @@ type Option func(*Client)
 func WithConfig(config *WebSocketConfig) Option {
 	return func(c *Client) {
 		c.config = config
-	}
-}
-
-// WithMetrics sets a custom metrics collector
-func WithMetrics(collector *metrics.WSCollector) Option {
-	return func(c *Client) {
-		c.metrics = collector
 	}
 }
 

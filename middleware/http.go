@@ -28,11 +28,6 @@ func ChainRoundTrippers(transport http.RoundTripper, wrappers ...func(http.Round
 	return result
 }
 
-// HTTPMetricsCollector defines the interface for collecting HTTP metrics
-type HTTPMetricsCollector interface {
-	RecordRequest(method, path string, statusCode int, duration time.Duration, err error)
-}
-
 // RateLimitRoundTripper implements token bucket rate limiting
 func RateLimitRoundTripper(rate float64, burst int) func(http.RoundTripper) http.RoundTripper {
 	limiter := &tokenBucketLimiter{
@@ -107,28 +102,6 @@ func LoggingRoundTripper(logger *log.Logger) func(http.RoundTripper) http.RoundT
 			} else {
 				logger.Printf("[HTTP] <-- %s %s [%d] (%v)", req.Method, req.URL.Path, resp.StatusCode, duration)
 			}
-
-			return resp, err
-		})
-	}
-}
-
-// MetricsRoundTripper collects request metrics
-func MetricsRoundTripper(collector HTTPMetricsCollector) func(http.RoundTripper) http.RoundTripper {
-	return func(next http.RoundTripper) http.RoundTripper {
-		return RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
-			start := time.Now()
-
-			resp, err := next.RoundTrip(req)
-
-			duration := time.Since(start)
-
-			statusCode := 0
-			if resp != nil {
-				statusCode = resp.StatusCode
-			}
-
-			collector.RecordRequest(req.Method, req.URL.Path, statusCode, duration, err)
 
 			return resp, err
 		})

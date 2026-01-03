@@ -19,12 +19,6 @@ type WSMessageHandler func(ctx context.Context, msg []byte) error
 // WSMiddleware wraps a WebSocket message handler
 type WSMiddleware func(WSMessageHandler) WSMessageHandler
 
-// WSMetricsCollector defines the interface for collecting WebSocket metrics
-type WSMetricsCollector interface {
-	RecordMessageReceived(bytes int, latency time.Duration)
-	RecordError()
-}
-
 // ChainWSMiddleware composes multiple middleware functions
 // Middleware is applied in order: first middleware is outermost
 func ChainWSMiddleware(middlewares ...WSMiddleware) WSMiddleware {
@@ -59,32 +53,6 @@ func WSLoggingMiddleware(logger Logger) WSMiddleware {
 				logger.Printf("[WS] <-- Error processing message: %v (%v)", err, duration)
 			} else {
 				logger.Printf("[WS] <-- Message processed successfully (%v)", duration)
-			}
-
-			return err
-		}
-	}
-}
-
-// WSMetricsMiddleware collects metrics for WebSocket messages
-func WSMetricsMiddleware(collector WSMetricsCollector) WSMiddleware {
-	if collector == nil {
-		return func(next WSMessageHandler) WSMessageHandler {
-			return next // No-op if no collector
-		}
-	}
-
-	return func(next WSMessageHandler) WSMessageHandler {
-		return func(ctx context.Context, msg []byte) error {
-			start := time.Now()
-
-			err := next(ctx, msg)
-
-			duration := time.Since(start)
-			collector.RecordMessageReceived(len(msg), duration)
-
-			if err != nil {
-				collector.RecordError()
 			}
 
 			return err

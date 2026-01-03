@@ -9,7 +9,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/samarthkathal/dhan-go/internal/limiter"
 	"github.com/samarthkathal/dhan-go/middleware"
-	"github.com/samarthkathal/dhan-go/metrics"
 	"github.com/samarthkathal/dhan-go/pool"
 )
 
@@ -28,7 +27,6 @@ type WebSocketConfig struct {
 	ReadBufferSize        int
 	WriteBufferSize       int
 	EnableLogging         bool
-	EnableMetrics         bool
 	EnableRecovery        bool
 }
 
@@ -54,8 +52,7 @@ type Connection struct {
 	messageHandler middleware.WSMessageHandler
 	middleware     middleware.WSMiddleware
 
-	// Metrics and pooling
-	metrics    *metrics.WSCollector
+	// Pooling
 	bufferPool *pool.BufferPool
 	limiter    *limiter.ConnectionLimiter
 
@@ -78,7 +75,6 @@ type ConnectionConfig struct {
 	Config         *WebSocketConfig
 	MessageHandler middleware.WSMessageHandler
 	Middleware     middleware.WSMiddleware
-	Metrics        *metrics.WSCollector
 	BufferPool     *pool.BufferPool
 	Limiter        *limiter.ConnectionLimiter
 }
@@ -100,7 +96,6 @@ func NewConnection(cfg ConnectionConfig) *Connection {
 		config:         cfg.Config,
 		messageHandler: cfg.MessageHandler,
 		middleware:     cfg.Middleware,
-		metrics:        cfg.Metrics,
 		bufferPool:     cfg.BufferPool,
 		limiter:        cfg.Limiter,
 		sendCh:         make(chan []byte, 256),
@@ -153,11 +148,6 @@ func (c *Connection) Connect(ctx context.Context) error {
 	c.connected = true
 	c.stateMu.Unlock()
 
-	// Record metrics
-	if c.metrics != nil {
-		c.metrics.RecordConnection(true)
-	}
-
 	// Start goroutines
 	go c.readLoop()
 	go c.writeLoop()
@@ -209,9 +199,6 @@ func (c *Connection) readLoop() {
 
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			if c.metrics != nil {
-				c.metrics.RecordError()
-			}
 			return
 		}
 
@@ -223,9 +210,6 @@ func (c *Connection) readLoop() {
 			}
 
 			if err := handler(c.ctx, message); err != nil {
-				if c.metrics != nil {
-					c.metrics.RecordError()
-				}
 				// Continue processing other messages
 			}
 		}
@@ -257,14 +241,7 @@ func (c *Connection) writeLoop() {
 			}
 
 			if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				if c.metrics != nil {
-					c.metrics.RecordError()
-				}
 				return
-			}
-
-			if c.metrics != nil {
-				c.metrics.RecordMessageSent(len(message))
 			}
 
 		case <-ticker.C:
@@ -274,9 +251,6 @@ func (c *Connection) writeLoop() {
 			}
 
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				if c.metrics != nil {
-					c.metrics.RecordError()
-				}
 				return
 			}
 
@@ -357,10 +331,6 @@ func (c *Connection) disconnect() {
 		c.conn = nil
 	}
 	c.connMu.Unlock()
-
-	if c.metrics != nil {
-		c.metrics.RecordConnection(false)
-	}
 
 	if c.limiter != nil {
 		c.limiter.ReleaseConnection(c.id)
@@ -446,7 +416,6 @@ func defaultWebSocketConfig() *WebSocketConfig {
 		ReadBufferSize:        4096,
 		WriteBufferSize:       4096,
 		EnableLogging:         true,
-		EnableMetrics:         true,
 		EnableRecovery:        true,
 	}
 }

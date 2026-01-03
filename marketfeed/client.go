@@ -10,7 +10,6 @@ import (
 	"github.com/samarthkathal/dhan-go/internal/limiter"
 	"github.com/samarthkathal/dhan-go/internal/wsconn"
 	"github.com/samarthkathal/dhan-go/middleware"
-	"github.com/samarthkathal/dhan-go/metrics"
 	"github.com/samarthkathal/dhan-go/pool"
 )
 
@@ -29,7 +28,6 @@ type WebSocketConfig struct {
 	ReadBufferSize        int
 	WriteBufferSize       int
 	EnableLogging         bool
-	EnableMetrics         bool
 	EnableRecovery        bool
 }
 
@@ -56,8 +54,7 @@ type PooledClient struct {
 	fullCallbacks     []FullCallback
 	errorCallbacks    []ErrorCallback
 
-	// Metrics and middleware
-	metrics    *metrics.WSCollector
+	// Middleware
 	middleware middleware.WSMiddleware
 
 	// State
@@ -101,7 +98,6 @@ func NewPooledClient(accessToken string, opts ...PooledOption) (*PooledClient, e
 		Config:         toWsconnConfig(client.config),
 		MessageHandler: client.handleMessage,
 		Middleware:     client.middleware,
-		Metrics:        client.metrics,
 		BufferPool:     pool.NewBufferPool(),
 		Limiter:        limiter.NewConnectionLimiter(),
 	})
@@ -370,8 +366,7 @@ type Client struct {
 	fullCallbacks     []FullCallback
 	errorCallbacks    []ErrorCallback
 
-	// Metrics and middleware
-	metrics    *metrics.WSCollector
+	// Middleware
 	middleware middleware.WSMiddleware
 
 	// State
@@ -429,7 +424,6 @@ func (c *Client) Connect(ctx context.Context) error {
 		Config:         toWsconnConfig(c.config),
 		MessageHandler: c.handleMessage,
 		Middleware:     c.middleware,
-		Metrics:        c.metrics,
 		BufferPool:     pool.NewBufferPool(),
 		Limiter:        nil, // No limiter for single connection
 	})
@@ -686,7 +680,6 @@ func defaultWebSocketConfig() *WebSocketConfig {
 		ReadBufferSize:        4096,
 		WriteBufferSize:       4096,
 		EnableLogging:         true,
-		EnableMetrics:         true,
 		EnableRecovery:        true,
 	}
 }
@@ -707,7 +700,6 @@ func toWsconnConfig(cfg *WebSocketConfig) *wsconn.WebSocketConfig {
 		ReadBufferSize:        cfg.ReadBufferSize,
 		WriteBufferSize:       cfg.WriteBufferSize,
 		EnableLogging:         cfg.EnableLogging,
-		EnableMetrics:         cfg.EnableMetrics,
 		EnableRecovery:        cfg.EnableRecovery,
 	}
 }
