@@ -10,8 +10,10 @@ go get github.com/samarthkathal/dhan-go
 
 ## Features
 
-- **REST API** - Orders, positions, holdings, funds
+- **REST API** - Orders, positions, holdings, funds, data APIs
+- **Data APIs** - Market Quote, Historical Data, Option Chain
 - **MarketFeed WebSocket** - Real-time market data (Ticker, Quote, OI, Full depth)
+- **FullDepth WebSocket** - 20/200-level market depth
 - **OrderUpdate WebSocket** - Real-time order status updates
 - **Connection pooling** - Handle 25,000+ instruments across 5 connections
 - **Rate limiting** - Built-in rate limiter for API compliance
@@ -22,29 +24,24 @@ go get github.com/samarthkathal/dhan-go
 ### REST API
 
 ```go
-import (
-    "github.com/samarthkathal/dhan-go/rest"
-    "net/http"
-)
+import "github.com/samarthkathal/dhan-go/rest"
 
 client, _ := rest.NewClient(
-    "https://api.dhan.co",
+    "https://api.dhan.co/v2",
     "your-access-token",
-    http.DefaultClient,
+    nil, // uses http.DefaultClient
 )
 
 // Get holdings
 holdings, _ := client.GetHoldings(ctx)
 
-// Place order
-order, _ := client.PlaceOrder(ctx, restgen.PlaceorderJSONRequestBody{
-    TransactionType: restgen.OrderRequestTransactionTypeBUY,
-    ExchangeSegment: restgen.OrderRequestExchangeSegmentNSEEQ,
-    ProductType:     restgen.OrderRequestProductTypeCNC,
-    OrderType:       restgen.OrderRequestOrderTypeMARKET,
-    SecurityId:      "1333",
-    Quantity:        1,
+// Get LTP for instruments
+ltp, _ := client.GetLTP(ctx, rest.MarketQuoteRequest{
+    "NSE_EQ": {11536, 1333}, // TCS, HDFC Bank
 })
+
+// Get option chain
+chain, _ := client.GetOptionChain(ctx, 13, "IDX_I", "2025-01-30")
 ```
 
 ### MarketFeed WebSocket
@@ -85,6 +82,29 @@ client, _ := orderupdate.NewClient(
 )
 
 client.Connect(ctx)
+```
+
+### FullDepth WebSocket
+
+```go
+import "github.com/samarthkathal/dhan-go/fulldepth"
+
+client, _ := fulldepth.NewClient(
+    "your-access-token",
+    "your-client-id",
+    fulldepth.WithDepthLevel(fulldepth.Depth20), // or Depth200
+    fulldepth.WithDepthCallback(func(data *fulldepth.FullDepthData) {
+        bidPrice, _ := data.GetBestBid()
+        askPrice, _ := data.GetBestAsk()
+        fmt.Printf("Bid: %.2f | Ask: %.2f | Spread: %.2f\n",
+            bidPrice, askPrice, data.GetSpread())
+    }),
+)
+
+client.Connect(ctx)
+client.Subscribe(ctx, []fulldepth.Instrument{
+    {ExchangeSegment: "NSE_EQ", SecurityID: 11536},
+})
 ```
 
 ## Configuration
@@ -133,9 +153,10 @@ client, _ := marketfeed.NewClient(
 
 See the [examples](./examples) directory for complete working examples:
 
-- `examples/rest/` - REST API usage
+- `examples/rest/` - REST API usage (including data APIs)
 - `examples/marketfeed/` - Market data streaming
 - `examples/orderupdate/` - Order tracking
+- `examples/fulldepth/` - Full market depth (20/200 levels)
 - `examples/combined/` - Full trading workflows
 
 ## API Reference
@@ -151,6 +172,19 @@ See the [examples](./examples) directory for complete working examples:
 | `PlaceOrder()` | Place new order |
 | `ModifyOrder()` | Modify existing order |
 | `CancelOrder()` | Cancel order |
+
+### Data APIs
+
+| Method | Description |
+|--------|-------------|
+| `GetLTP()` | Last traded price for instruments |
+| `GetOHLC()` | OHLC data for instruments |
+| `GetQuote()` | Full quote with market depth |
+| `GetHistoricalData()` | Daily OHLC candles |
+| `GetIntradayData()` | Minute OHLC candles |
+| `GetExpiredOptionsData()` | Historical data for expired options |
+| `GetOptionChain()` | Option chain with greeks |
+| `GetExpiryList()` | List of expiry dates |
 
 ### MarketFeed Data Types
 
@@ -171,6 +205,16 @@ See the [examples](./examples) directory for complete working examples:
 | `IsRejected()` | Order rejected |
 | `IsCancelled()` | Order cancelled |
 | `GetAvgTradedPrice()` | Average fill price |
+
+### FullDepth Helpers
+
+| Method | Description |
+|--------|-------------|
+| `GetBestBid()` | Best bid price and quantity |
+| `GetBestAsk()` | Best ask price and quantity |
+| `GetSpread()` | Bid-ask spread |
+| `GetTotalBidQuantity()` | Sum of all bid quantities |
+| `GetTotalAskQuantity()` | Sum of all ask quantities |
 
 ## License
 
