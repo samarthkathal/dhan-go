@@ -29,6 +29,7 @@ go run main.go
 | 05_with_custom_http | Custom HTTP client config |
 | 06_error_handling | Error handling patterns |
 | 07_graceful_shutdown | Signal handling, cleanup |
+| 08_data_apis | Historical data, market quote, option chain |
 
 ### MarketFeed WebSocket (`marketfeed/`)
 
@@ -50,6 +51,13 @@ go run main.go
 | 02_status_helpers | IsFilled, IsRejected, IsCancelled helpers |
 | 03_custom_config | Custom timeouts |
 | 05_graceful_shutdown | Clean disconnection |
+
+### FullDepth WebSocket (`fulldepth/`)
+
+| Example | Description |
+|---------|-------------|
+| 01_basic | 20-level market depth |
+| 02_200_depth | 200-level market depth (NSE only) |
 
 ### Combined (`combined/`)
 
