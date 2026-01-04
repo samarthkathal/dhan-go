@@ -161,30 +161,109 @@ See the [examples](./examples) directory for complete working examples:
 
 ## API Reference
 
-### REST Endpoints
+> **Note on Implementation:** Most methods use the auto-generated OpenAPI client (`c.gen.*`).
+> Methods marked with `*` use manual HTTP calls because they are not in the OpenAPI spec.
+
+### REST Endpoints - Orders
+
+| Method | Description |
+|--------|-------------|
+| `GetOrders()` | Get today's orders |
+| `GetOrderByID()` | Get order by order ID |
+| `GetOrderByCorrelationID()` | Get order by correlation ID |
+| `PlaceOrder()` | Place new order |
+| `ModifyOrder()` | Modify existing order |
+| `CancelOrder()` | Cancel order |
+| `PlaceSliceOrder()` | Place slice/basket order |
+
+### REST Endpoints - Forever Orders (GTT)
+
+| Method | Description |
+|--------|-------------|
+| `GetForeverOrders()` | Get all GTT/forever orders |
+| `PlaceForeverOrder()` | Place a GTT order |
+| `ModifyForeverOrder()` | Modify a GTT order |
+| `CancelForeverOrder()` | Cancel a GTT order |
+
+### REST Endpoints - Alert Orders
+
+| Method | Description |
+|--------|-------------|
+| `GetAllAlertOrders()` | Get all alert orders |
+| `GetAlertOrder()` | Get specific alert order |
+| `PlaceAlertOrder()` | Place an alert order |
+| `ModifyAlertOrder()` | Modify an alert order |
+| `DeleteAlertOrder()` | Delete an alert order |
+
+### REST Endpoints - Super Orders (Bracket)
+
+| Method | Description |
+|--------|-------------|
+| `GetSuperOrders()` | Get all super/bracket orders |
+| `PlaceSuperOrder()` | Place a super order |
+| `ModifySuperOrder()` | Modify a super order |
+| `CancelSuperOrder()` | Cancel a super order |
+
+### REST Endpoints - Trades
+
+| Method | Description |
+|--------|-------------|
+| `GetAllTrades()` | Get all trades for today |
+| `GetTradeHistory()` | Get paginated trade history |
+| `GetTradesByOrderID()` | Get trades for specific order |
+
+### REST Endpoints - Portfolio
 
 | Method | Description |
 |--------|-------------|
 | `GetHoldings()` | Get portfolio holdings |
 | `GetPositions()` | Get open positions |
-| `GetOrders()` | Get today's orders |
+| `ConvertPosition()` | Convert position (intraday to CNC) |
+
+### REST Endpoints - Funds & Margin
+
+| Method | Description |
+|--------|-------------|
 | `GetFundLimits()` | Get fund/margin limits |
-| `PlaceOrder()` | Place new order |
-| `ModifyOrder()` | Modify existing order |
-| `CancelOrder()` | Cancel order |
+| `GetLedger()` | Get ledger/cash flow |
+| `CalculateMargin()` | Calculate margin requirements |
+
+### REST Endpoints - Kill Switch
+
+| Method | Description |
+|--------|-------------|
+| `GetKillSwitchStatus()` | Check kill switch status |
+| `SetKillSwitch()` | Activate/deactivate kill switch |
+
+### REST Endpoints - EDIS
+
+| Method | Description |
+|--------|-------------|
+| `SubmitEDISForm()` | Submit EDIS form |
+| `SubmitBulkEDISForm()` | Bulk EDIS submission |
+| `GetEDISQuantityStatus()` | Check EDIS quantity status |
+| `GetEDISTPIN()` | Get EDIS T-PIN |
+
+### REST Endpoints - IP Management
+
+| Method | Description |
+|--------|-------------|
+| `GetIP()` | Get registered IPs |
+| `SetIP()` | Set IP addresses |
+| `ModifyIP()` | Modify IP addresses |
 
 ### Data APIs
 
 | Method | Description |
 |--------|-------------|
-| `GetLTP()` | Last traded price for instruments |
-| `GetOHLC()` | OHLC data for instruments |
-| `GetQuote()` | Full quote with market depth |
+| `GetLTP()`* | Last traded price for instruments |
+| `GetOHLC()`* | OHLC data for instruments |
+| `GetQuote()`* | Full quote with market depth |
 | `GetHistoricalData()` | Daily OHLC candles |
 | `GetIntradayData()` | Minute OHLC candles |
 | `GetExpiredOptionsData()` | Historical data for expired options |
-| `GetOptionChain()` | Option chain with greeks |
-| `GetExpiryList()` | List of expiry dates |
+| `GetOptionChain()`* | Option chain with greeks |
+| `GetExpiryList()`* | List of expiry dates |
 
 ### MarketFeed Data Types
 
