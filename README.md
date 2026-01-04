@@ -295,6 +295,11 @@ See the [examples](./examples) directory for complete working examples:
 | `GetTotalBidQuantity()` | Sum of all bid quantities |
 | `GetTotalAskQuantity()` | Sum of all ask quantities |
 
+## Documentation
+
+- [Examples Guide](./examples/README.md) - Complete working examples for all features
+- [Code Generation](./CODE_GENERATION.md) - How to regenerate client from OpenAPI spec
+
 ## License
 
 MIT License - see [LICENSE](./LICENSE)

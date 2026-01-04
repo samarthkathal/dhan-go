@@ -1,130 +1,18 @@
-# Code Generation SOP
+# Code Generation
 
-This document describes the Standard Operating Procedure (SOP) for generating and updating the Dhan Go SDK client code from the OpenAPI specification.
+The Dhan Go SDK uses [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) to generate client code from the OpenAPI specification.
 
-## Table of Contents
+## Quick Reference
 
-1. [Overview](#overview)
-2. [Prerequisites](#prerequisites)
-3. [Quick Regeneration](#quick-regeneration)
-4. [Updating OpenAPI Spec](#updating-openapi-spec)
-5. [Verification Checklist](#verification-checklist)
-6. [Troubleshooting](#troubleshooting)
-7. [Understanding the Generation](#understanding-the-generation)
+| Item | Path |
+|------|------|
+| Input | `openapi.json` |
+| Output | `internal/restgen/client.go` |
+| Config | `tools.go` |
 
----
-
-## Overview
-
-The Dhan Go SDK uses [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) to automatically generate type-safe client code from the official Dhan v2 OpenAPI 3.0.1 specification.
-
-**What gets generated:**
-- All type definitions (request/response models)
-- Client struct with all API methods
-- Type-safe request builders
-- Response wrapper types
-
-**File**: `rest/client/client.go` (~8,933 lines) - All types and client methods
-
-**Source**: `openapi.json` (Dhan v2 OpenAPI spec)
-
----
-
-## Prerequisites
-
-Ensure you have:
-
-1. **Go 1.21 or higher**
-   ```bash
-   go version
-   ```
-
-2. **oapi-codegen** (automatically installed via `go generate`)
-   - No manual installation needed
-   - Specified in `tools.go`
-
-3. **OpenAPI specification**
-   - File: `openapi.json`
-   - Must be valid OpenAPI 3.0.x format
-
----
-
-## Quick Regeneration
-
-### Step 1: Run Generation
+## Regenerate Client
 
 ```bash
-# From project root
-go generate ./...
-```
-
-This command:
-1. Reads `tools.go`
-2. Downloads oapi-codegen v2 (if not cached)
-3. Reads `openapi.json`
-4. Generates `rest/client/client.go` (types + client methods)
-
-**Expected output:**
-```
-# github.com/samarthkathal/dhan-go
-```
-
-No output means success!
-
-### Step 2: Verify Compilation
-
-```bash
-# Build all packages
-go build ./...
-```
-
-Should complete without errors.
-
-### Step 3: Run Examples
-
-```bash
-# Test REST examples compile
-cd examples/rest/basic
-go build .
-
-cd ../middleware
-go build .
-
-cd ../graceful_shutdown
-go build .
-
-cd ../all_features
-go build .
-```
-
-All examples should compile successfully.
-
----
-
-## Updating OpenAPI Spec
-
-### When to Update
-
-- Dhan releases new API endpoints
-- Existing endpoints change (new fields, different types)
-- Bug fixes in the official spec
-
-### How to Update
-
-#### Option 1: Download from Dhan
-
-1. Visit Dhan API documentation
-2. Download latest OpenAPI spec
-3. Replace `openapi.json`
-4. Run generation
-
-```bash
-# Backup current spec
-cp openapi.json openapi.json.backup
-
-# Download new spec (example URL)
-curl -o openapi.json https://api.dhan.co/v2/openapi.json
-
 # Generate
 go generate ./...
 
@@ -132,427 +20,48 @@ go generate ./...
 go build ./...
 ```
 
-#### Option 2: Manual Edit
+## Generation Command
 
-If you need to fix issues in the spec:
+From `tools.go`:
 
-1. Edit `openapi.json`
-2. Validate JSON syntax
-   ```bash
-   python3 -m json.tool openapi.json > /dev/null
-   ```
-3. Regenerate
-   ```bash
-   go generate ./...
-   ```
+```go
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest \
+  -generate types,skip-prune,client \
+  -package restgen \
+  -response-type-suffix=Result \
+  -o internal/restgen/client.go \
+  openapi.json
+```
 
-### Validation
-
-After updating the spec, verify:
+## Update OpenAPI Spec
 
 ```bash
-# 1. JSON is valid
-python3 -m json.tool openapi.json > /dev/null
+# Backup and download new spec
+cp openapi.json openapi.json.backup
+curl -o openapi.json https://api.dhan.co/v2/openapi.json
 
-# 2. Generation succeeds
+# Regenerate and verify
 go generate ./...
-
-# 3. Code compiles
 go build ./...
-
-# 4. Examples compile
-cd examples/01_basic && go build .
-cd ../02_with_middleware && go build .
-cd ../03_graceful_shutdown && go build .
-cd ../04_all_features && go build .
 ```
 
----
+## What's Generated
 
-## Verification Checklist
+- **Types**: All request/response models from OpenAPI schemas
+- **Client**: `ClientWithResponses` struct with all API methods
+- **Response wrappers**: `*Result` types with status codes and parsed JSON
 
-After regenerating client code, complete this checklist:
+## Important Notes
 
-### 1. Generation Succeeded
-
-```bash
-go generate ./...
-# Should complete without errors
-```
-
-### 2. File Generated
-
-```bash
-ls -lh rest/client/client.go
-# Should show file exists (~300KB+)
-```
-
-### 3. Code Compiles
-
-```bash
-go build ./...
-# Should complete without errors
-```
-
-### 4. Package Imports
-
-```bash
-go list -m all | grep oapi-codegen
-# Should show oapi-codegen dependencies
-```
-
-### 5. Examples Compile
-
-```bash
-# All examples should compile
-for dir in examples/*/; do
-    echo "Building $dir"
-    (cd "$dir" && go build .) || echo "FAILED: $dir"
-done
-```
-
-### 6. Run Tests (if any)
-
-```bash
-go test ./...
-```
-
-### 7. Check Generated Methods
-
-```bash
-# Count generated methods (should be ~31 endpoints)
-grep -c "WithResponse(ctx context.Context" rest/client/client.go
-```
-
-### 8. Spot Check
-
-Open `rest/client/client.go` and verify:
-- Package declaration: `package client`
-- Imports look correct
-- No obvious syntax errors
-- Methods exist (e.g., `GetpositionsWithResponse`)
-- Types are properly defined
-
----
+- **Don't edit** `internal/restgen/client.go` - it gets overwritten
+- **Do edit** `rest/*.go` (wrapper), `middleware/*.go`, `examples/*`
+- Package name is `restgen`, not `client`
+- Response types use `Result` suffix (e.g., `GetpositionsResult`)
 
 ## Troubleshooting
 
-### Issue: "command not found: oapi-codegen"
-
-**Cause**: Go can't find oapi-codegen
-
-**Solution**:
-```bash
-# Clean Go cache
-go clean -modcache
-
-# Try again
-go generate ./...
-```
-
-### Issue: "undefined: OpenAPI types"
-
-**Cause**: Missing import in generated code
-
-**Solution**: Check if `openapi.json` is valid:
-```bash
-python3 -m json.tool openapi.json > /dev/null
-```
-
-If invalid, fix JSON syntax and regenerate.
-
-### Issue: "duplicate type name"
-
-**Cause**: OpenAPI spec has naming conflicts
-
-**Solution**: The generation command uses `-response-type-suffix=Result` to avoid this. If still occurring:
-
-1. Check `tools.go` has the flag:
-   ```go
-   -response-type-suffix=Result
-   ```
-
-2. If needed, add more specific suffix:
-   ```go
-   -response-type-suffix=Response
-   ```
-
-### Issue: Examples don't compile after regeneration
-
-**Cause**: API signatures changed
-
-**Solution**:
-1. Check what changed:
-   ```bash
-   git diff client/generated.go
-   ```
-
-2. Update examples to match new signatures
-
-3. Common changes:
-   - New required fields in requests
-   - Field type changes (string → int)
-   - New enum values
-
-### Issue: "too many API methods"
-
-**Cause**: Dhan added new endpoints
-
-**Solution**: This is expected!
-- New endpoints are available automatically
-- Update examples if you want to showcase them
-- Update `USAGE_GUIDE.md` with new methods
-
----
-
-## Understanding the Generation
-
-### Generation Command
-
-Located in `tools.go`:
-
-```go
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest -generate types,skip-prune,client -package client -response-type-suffix=Result -o rest/client/client.go openapi.json
-```
-
-**Breakdown:**
-
-- `go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest`
-  - Download and run oapi-codegen v2 (latest)
-
-- `-generate types,skip-prune,client`
-  - Generate type definitions
-  - Don't prune unused types
-  - Generate client code
-
-- `-package client`
-  - Generated code goes in `client` package
-
-- `-response-type-suffix=Result`
-  - Append "Result" to response wrapper types
-  - Prevents naming conflicts (e.g., `GetpositionsResult` vs `Position` model)
-
-- `-o rest/client/client.go`
-  - Output file location
-
-- `openapi.json`
-  - Input OpenAPI specification
-
-### What Gets Generated
-
-#### 1. Type Definitions
-
-All request/response models from OpenAPI `components.schemas`:
-
-```go
-type OrderRequest struct {
-    SecurityId      *string                       `json:"securityId,omitempty"`
-    ExchangeSegment OrderRequestExchangeSegment   `json:"exchangeSegment"`
-    TransactionType OrderRequestTransactionType   `json:"transactionType"`
-    // ...
-}
-```
-
-#### 2. Client Struct
-
-```go
-type ClientWithResponses struct {
-    // ...
-}
-```
-
-#### 3. API Methods
-
-For each endpoint in the spec:
-
-```go
-func (c *ClientWithResponses) GetpositionsWithResponse(
-    ctx context.Context,
-    params *GetpositionsParams,
-    reqEditors ...RequestEditorFn,
-) (*GetpositionsResult, error) {
-    // ...
-}
-```
-
-#### 4. Response Wrappers
-
-```go
-type GetpositionsResult struct {
-    Body         []byte
-    HTTPResponse *http.Response
-    JSON200      *PositionResponse
-    // ...
-}
-
-func (r GetpositionsResult) StatusCode() int {
-    // ...
-}
-```
-
-#### 5. Constructor
-
-```go
-func NewClientWithResponses(
-    server string,
-    opts ...ClientOption,
-) (*ClientWithResponses, error) {
-    // ...
-}
-```
-
-#### 6. Options
-
-```go
-func WithHTTPClient(doer HttpRequestDoer) ClientOption {
-    // ...
-}
-
-func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
-    // ...
-}
-
-func WithBaseURL(baseURL string) ClientOption {
-    // ...
-}
-```
-
----
-
-## Development Workflow
-
-### Making Changes
-
-1. **Don't edit `rest/client/client.go`** - It gets overwritten!
-2. **Do edit**:
-   - `utils/*.go` - Custom utilities
-   - `examples/*/main.go` - Examples
-   - Documentation files
-
-### Before Committing
-
-```bash
-# 1. Ensure generated code is up to date
-go generate ./...
-
-# 2. Format code
-go fmt ./...
-
-# 3. Verify build
-go build ./...
-
-# 4. Run tests
-go test ./...
-
-# 5. Verify examples
-for dir in examples/*/; do
-    (cd "$dir" && go build .)
-done
-```
-
-### Git Workflow
-
-```bash
-# Check what changed
-git status
-
-# If generated code changed:
-git diff rest/client/
-
-# Add files
-git add .
-
-# Commit
-git commit -m "Regenerate client from updated OpenAPI spec"
-```
-
----
-
-## Maintenance Schedule
-
-### Regular Checks
-
-**Weekly**:
-- Check Dhan API documentation for updates
-- Review Dhan's release notes
-
-**Monthly**:
-- Re-download OpenAPI spec
-- Regenerate client
-- Test all examples
-- Update documentation if needed
-
-**When Issues Reported**:
-- Check if regeneration fixes the issue
-- Compare spec versions
-- Update examples if API changed
-
----
-
-## Reference
-
-### Useful Commands
-
-```bash
-# Generate client
-go generate ./...
-
-# Check generated file
-wc -l rest/client/client.go
-
-# List all API methods
-grep "WithResponse(ctx context.Context" rest/client/client.go
-
-# Find specific method
-grep -i "placeorder" rest/client/client.go
-
-# Check types
-grep "^type.*struct" rest/client/client.go
-
-# Validate OpenAPI spec
-python3 -m json.tool openapi.json > /dev/null
-
-# Clean and rebuild
-go clean -cache
-go build ./...
-```
-
-### Files Involved
-
-- `tools.go` - Generation directive
-- `openapi.json` - OpenAPI specification (input)
-- `rest/client/client.go` - Generated client & types (output)
-- `go.mod` - Dependencies (oapi-codegen)
-
-### External Links
-
-- [oapi-codegen Documentation](https://github.com/oapi-codegen/oapi-codegen)
-- [Dhan API Documentation](https://dhanhq.co/docs/v2/)
-- [OpenAPI Specification](https://swagger.io/specification/)
-
----
-
-## Quick Reference Card
-
-```
-┌────────────────────────────────────────────────────────┐
-│  QUICK REFERENCE: CODE GENERATION                      │
-├────────────────────────────────────────────────────────┤
-│                                                        │
-│  Generate:     go generate ./...                       │
-│  Build:        go build ./...                          │
-│  Test:         go test ./...                           │
-│                                                        │
-│  Input:        openapi.json                            │
-│  Output:       rest/client/client.go                   │
-│  Config:       tools.go                                │
-│                                                        │
-│  DON'T EDIT:   rest/client/client.go (generated)       │
-│  DO EDIT:      utils/*.go, examples/*, docs/*.md       │
-│                                                        │
-└────────────────────────────────────────────────────────┘
-```
-
----
-
-**For questions, see [USAGE_GUIDE.md](USAGE_GUIDE.md) or create an issue on GitHub.**
+| Issue | Solution |
+|-------|----------|
+| oapi-codegen not found | `go clean -modcache && go generate ./...` |
+| Invalid JSON | `python3 -m json.tool openapi.json > /dev/null` |
+| Examples don't compile | Check `git diff internal/restgen/` for API changes |
