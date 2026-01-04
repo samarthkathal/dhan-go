@@ -24,18 +24,21 @@ type Client struct {
 	conn     *websocket.Conn
 	connLock sync.Mutex
 
-	// Callbacks
+	// Callbacks - protected by mu
 	mu             sync.RWMutex
 	depthCallbacks []DepthCallback
 	errorCallbacks []ErrorCallback
 
-	// State
-	connected   bool
-	instruments map[string]Instrument // key: "exchange:securityID"
-	ctx         context.Context
-	cancel      context.CancelFunc
+	// State - connected protected by connLock
+	connected bool
+	ctx       context.Context
+	cancel    context.CancelFunc
 
-	// Pending depth data (for combining bid/ask)
+	// Instruments - protected by instrLock
+	instrLock   sync.RWMutex
+	instruments map[string]Instrument // key: "exchange:securityID"
+
+	// Pending depth data (for combining bid/ask) - protected by pendingLock
 	pendingDepth map[int32]*FullDepthData // key: securityID
 	pendingLock  sync.Mutex
 }
@@ -147,18 +150,22 @@ func (c *Client) Disconnect() error {
 // Subscribe subscribes to market depth for the specified instruments.
 // Note: For 200-depth, only one instrument can be subscribed at a time.
 func (c *Client) Subscribe(ctx context.Context, instruments []Instrument) error {
+	c.connLock.Lock()
 	if !c.connected {
+		c.connLock.Unlock()
 		return fmt.Errorf("not connected")
 	}
 
 	// Validate instruments for 200-depth
 	if c.config.DepthLevel == Depth200 && len(instruments) > 1 {
+		c.connLock.Unlock()
 		return fmt.Errorf("200-depth only supports one instrument at a time")
 	}
 
 	// Validate exchange segments (only NSE_EQ and NSE_FNO supported)
 	for _, inst := range instruments {
 		if inst.ExchangeSegment != ExchangeNSEEQ && inst.ExchangeSegment != ExchangeNSEFNO {
+			c.connLock.Unlock()
 			return fmt.Errorf("only NSE_EQ and NSE_FNO are supported for full depth, got: %s", inst.ExchangeSegment)
 		}
 	}
@@ -189,8 +196,7 @@ func (c *Client) Subscribe(ctx context.Context, instruments []Instrument) error 
 		}
 	}
 
-	// Send subscription
-	c.connLock.Lock()
+	// Send subscription while holding lock
 	err := c.conn.WriteJSON(msg)
 	c.connLock.Unlock()
 
@@ -198,11 +204,13 @@ func (c *Client) Subscribe(ctx context.Context, instruments []Instrument) error 
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
 
-	// Track subscribed instruments
+	// Track subscribed instruments with proper locking
+	c.instrLock.Lock()
 	for _, inst := range instruments {
 		key := fmt.Sprintf("%s:%d", inst.ExchangeSegment, inst.SecurityID)
 		c.instruments[key] = inst
 	}
+	c.instrLock.Unlock()
 
 	return nil
 }
@@ -221,13 +229,20 @@ func (c *Client) readLoop() {
 		case <-c.ctx.Done():
 			return
 		default:
+			c.connLock.Lock()
 			if !c.connected {
+				c.connLock.Unlock()
 				return
 			}
+			conn := c.conn
+			c.connLock.Unlock()
 
-			_, data, err := c.conn.ReadMessage()
+			_, data, err := conn.ReadMessage()
 			if err != nil {
-				if c.connected {
+				c.connLock.Lock()
+				connected := c.connected
+				c.connLock.Unlock()
+				if connected {
 					c.notifyError(fmt.Errorf("read error: %w", err))
 				}
 				return
@@ -286,9 +301,20 @@ func (c *Client) processDepthData(data *DepthData) {
 		})
 	}
 
-	// If we have both bid and ask, notify callbacks
+	// If we have both bid and ask, notify callbacks with a deep copy
 	if len(pending.Bids) > 0 && len(pending.Asks) > 0 {
-		c.notifyDepth(pending)
+		// Create a deep copy for callbacks to avoid race conditions
+		notifyData := &FullDepthData{
+			ExchangeSegment: pending.ExchangeSegment,
+			SecurityID:      pending.SecurityID,
+			Bids:            make([]DepthEntry, len(pending.Bids)),
+			Asks:            make([]DepthEntry, len(pending.Asks)),
+		}
+		copy(notifyData.Bids, pending.Bids)
+		copy(notifyData.Asks, pending.Asks)
+
+		c.notifyDepth(notifyData)
+
 		// Reset pending for next update
 		c.pendingDepth[secID] = &FullDepthData{
 			ExchangeSegment: data.Header.ExchangeSegment,
@@ -333,6 +359,10 @@ func (c *Client) GetStats() Stats {
 	connected := c.connected
 	c.connLock.Unlock()
 
+	c.instrLock.RLock()
+	instrCount := len(c.instruments)
+	c.instrLock.RUnlock()
+
 	baseURL := Depth20URL
 	if c.config.DepthLevel == Depth200 {
 		baseURL = Depth200URL
@@ -341,7 +371,7 @@ func (c *Client) GetStats() Stats {
 	return Stats{
 		Connected:       connected,
 		DepthLevel:      c.config.DepthLevel,
-		InstrumentCount: len(c.instruments),
+		InstrumentCount: instrCount,
 		URL:             baseURL,
 	}
 }

@@ -785,7 +785,8 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("request returned status %d: %s", resp.StatusCode, string(respBody))
+		// Don't include full response body in error as it may contain sensitive data
+		return nil, fmt.Errorf("request returned status %d", resp.StatusCode)
 	}
 
 	return respBody, nil

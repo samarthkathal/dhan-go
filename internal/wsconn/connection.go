@@ -66,6 +66,9 @@ type Connection struct {
 	connected bool
 	ctx       context.Context
 	cancel    context.CancelFunc
+
+	// Close synchronization - prevents double-close panic
+	closeOnce sync.Once
 }
 
 // ConnectionConfig holds configuration for creating a new connection
@@ -347,8 +350,10 @@ func (c *Connection) Close() error {
 		return nil
 	}
 
-	// Signal stop
-	close(c.stopCh)
+	// Use sync.Once to prevent double-close panic on stopCh
+	c.closeOnce.Do(func() {
+		close(c.stopCh)
+	})
 
 	// Cancel context
 	c.cancel()
@@ -407,12 +412,12 @@ func defaultWebSocketConfig() *WebSocketConfig {
 		MaxInstrumentsPerConn: 5000,
 		MaxBatchSize:          100,
 		ConnectTimeout:        30 * time.Second,
-		ReadTimeout:           0,
+		ReadTimeout:           60 * time.Second, // Default read timeout to detect stale connections
 		WriteTimeout:          10 * time.Second,
 		PingInterval:          10 * time.Second,
 		PongWait:              40 * time.Second,
 		ReconnectDelay:        5 * time.Second,
-		MaxReconnectAttempts:  0,
+		MaxReconnectAttempts:  10, // Sensible default limit
 		ReadBufferSize:        4096,
 		WriteBufferSize:       4096,
 		EnableLogging:         true,

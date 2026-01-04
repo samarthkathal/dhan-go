@@ -22,11 +22,11 @@ func DefaultConfig() *Config {
 	return &Config{
 		DepthLevel:      Depth20,
 		ConnectTimeout:  30 * time.Second,
-		ReadTimeout:     0, // No read timeout
+		ReadTimeout:     60 * time.Second, // Default read timeout to detect stale connections
 		WriteTimeout:    10 * time.Second,
 		PingInterval:    10 * time.Second,
 		ReconnectDelay:  5 * time.Second,
-		MaxReconnects:   0, // Unlimited
+		MaxReconnects:   10, // Sensible default limit
 		ReadBufferSize:  16384,
 		WriteBufferSize: 4096,
 	}

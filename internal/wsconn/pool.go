@@ -224,6 +224,19 @@ func (p *Pool) Subscribe(ctx context.Context, instruments []string, subscribeMsg
 
 	// Send subscription messages
 	for connID, instList := range connectionInstruments {
+		// Get connection with lock and verify it's still valid
+		p.mu.RLock()
+		conn, exists := p.connections[connID]
+		p.mu.RUnlock()
+
+		if !exists || conn == nil {
+			return fmt.Errorf("connection %s no longer exists", connID)
+		}
+
+		if !conn.IsConnected() {
+			return fmt.Errorf("connection %s is not connected", connID)
+		}
+
 		// Batch into groups of MaxBatchSize
 		for i := 0; i < len(instList); i += p.config.MaxBatchSize {
 			end := i + p.config.MaxBatchSize
@@ -243,11 +256,7 @@ func (p *Pool) Subscribe(ctx context.Context, instruments []string, subscribeMsg
 				return fmt.Errorf("failed to generate subscription message: %w", err)
 			}
 
-			// Send message
-			p.mu.RLock()
-			conn := p.connections[connID]
-			p.mu.RUnlock()
-
+			// Send message - conn.Send is thread-safe
 			if err := conn.Send(msg); err != nil {
 				return fmt.Errorf("failed to send subscription: %w", err)
 			}

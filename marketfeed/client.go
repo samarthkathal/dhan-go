@@ -671,12 +671,12 @@ func defaultWebSocketConfig() *WebSocketConfig {
 		MaxInstrumentsPerConn: 5000,
 		MaxBatchSize:          100,
 		ConnectTimeout:        30 * time.Second,
-		ReadTimeout:           0,
+		ReadTimeout:           60 * time.Second, // Default read timeout to detect stale connections
 		WriteTimeout:          10 * time.Second,
 		PingInterval:          10 * time.Second,
 		PongWait:              40 * time.Second,
 		ReconnectDelay:        5 * time.Second,
-		MaxReconnectAttempts:  0,
+		MaxReconnectAttempts:  10, // Sensible default limit
 		ReadBufferSize:        4096,
 		WriteBufferSize:       4096,
 		EnableLogging:         true,
