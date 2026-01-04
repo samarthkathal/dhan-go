@@ -73,120 +73,160 @@ func createDepth200BidPacket() []byte {
 	return data
 }
 
-// BenchmarkParseDepthHeader benchmarks depth header parsing
-func BenchmarkParseDepthHeader(b *testing.B) {
+// createDepth200AskPacket creates a mock 200-depth ask packet
+func createDepth200AskPacket() []byte {
+	numRows := 200
+	data := make([]byte, 12+numRows*16)
+
+	binary.LittleEndian.PutUint16(data[0:2], uint16(len(data)))
+	data[2] = fulldepth.FeedCodeAsk
+	data[3] = 1
+	binary.LittleEndian.PutUint32(data[4:8], 11536)
+	binary.LittleEndian.PutUint32(data[8:12], uint32(numRows))
+
+	for i := 0; i < numRows; i++ {
+		offset := 12 + i*16
+		price := 1235.00 + float64(i)*0.01
+		binary.LittleEndian.PutUint64(data[offset:offset+8], math.Float64bits(price))
+		binary.LittleEndian.PutUint32(data[offset+8:offset+12], uint32(100+i*10))
+		binary.LittleEndian.PutUint32(data[offset+12:offset+16], uint32(1+i%50))
+	}
+	return data
+}
+
+// BenchmarkWithDepthData20 benchmarks 20-depth parsing with callback API
+func BenchmarkWithDepthData20(b *testing.B) {
 	data := createDepth20BidPacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := fulldepth.ParseDepthHeader(data)
+		err := fulldepth.WithDepthData(data, fulldepth.Depth20, func(d *fulldepth.DepthData, remaining []byte) error {
+			_ = d.Entries
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkParseDepth20Bid benchmarks 20-depth bid parsing
-func BenchmarkParseDepth20Bid(b *testing.B) {
-	data := createDepth20BidPacket()
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		_, _, err := fulldepth.ParseDepthData(data, fulldepth.Depth20)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkParseDepth20Ask benchmarks 20-depth ask parsing
-func BenchmarkParseDepth20Ask(b *testing.B) {
-	data := createDepth20AskPacket()
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		_, _, err := fulldepth.ParseDepthData(data, fulldepth.Depth20)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkParseDepth200 benchmarks 200-depth parsing
-func BenchmarkParseDepth200(b *testing.B) {
+// BenchmarkWithDepthData200 benchmarks 200-depth parsing with callback API
+func BenchmarkWithDepthData200(b *testing.B) {
 	data := createDepth200BidPacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, _, err := fulldepth.ParseDepthData(data, fulldepth.Depth200)
+		err := fulldepth.WithDepthData(data, fulldepth.Depth200, func(d *fulldepth.DepthData, remaining []byte) error {
+			_ = d.Entries
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkParseDepth20Parallel benchmarks parallel 20-depth parsing
-func BenchmarkParseDepth20Parallel(b *testing.B) {
-	data := createDepth20BidPacket()
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			_, _, err := fulldepth.ParseDepthData(data, fulldepth.Depth20)
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
-// BenchmarkParseDepth200Parallel benchmarks parallel 200-depth parsing
-func BenchmarkParseDepth200Parallel(b *testing.B) {
-	data := createDepth200BidPacket()
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			_, _, err := fulldepth.ParseDepthData(data, fulldepth.Depth200)
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
-// BenchmarkFullDepthRoundTrip simulates receiving bid+ask and combining
-func BenchmarkFullDepthRoundTrip(b *testing.B) {
+// BenchmarkWithFullDepthData benchmarks combined bid/ask parsing with callback API
+func BenchmarkWithFullDepthData(b *testing.B) {
 	bidData := createDepth20BidPacket()
 	askData := createDepth20AskPacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		// Parse bid
-		bid, _, err := fulldepth.ParseDepthData(bidData, fulldepth.Depth20)
+		err := fulldepth.WithFullDepthData(bidData, askData, fulldepth.Depth20, func(f *fulldepth.FullDepthData) error {
+			_, _ = f.GetBestBid()
+			_, _ = f.GetBestAsk()
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
 
-		// Parse ask
-		ask, _, err := fulldepth.ParseDepthData(askData, fulldepth.Depth20)
+// BenchmarkWithFullDepthData200 benchmarks combined 200-depth bid/ask parsing
+func BenchmarkWithFullDepthData200(b *testing.B) {
+	bidData := createDepth200BidPacket()
+	askData := createDepth200AskPacket()
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		err := fulldepth.WithFullDepthData(bidData, askData, fulldepth.Depth200, func(f *fulldepth.FullDepthData) error {
+			_, _ = f.GetBestBid()
+			_, _ = f.GetBestAsk()
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
 
-		// Simulate combining (like processDepthData does)
-		_ = &fulldepth.FullDepthData{
-			ExchangeSegment: bid.Header.ExchangeSegment,
-			SecurityID:      bid.Header.SecurityID,
-			Bids:            bid.Entries,
-			Asks:            ask.Entries,
+// BenchmarkWithDepthData20Parallel benchmarks parallel 20-depth parsing
+func BenchmarkWithDepthData20Parallel(b *testing.B) {
+	data := createDepth20BidPacket()
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = fulldepth.WithDepthData(data, fulldepth.Depth20, func(d *fulldepth.DepthData, remaining []byte) error {
+				_ = d.Entries
+				return nil
+			})
 		}
+	})
+}
+
+// BenchmarkWithDepthData200Parallel benchmarks parallel 200-depth parsing
+func BenchmarkWithDepthData200Parallel(b *testing.B) {
+	data := createDepth200BidPacket()
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = fulldepth.WithDepthData(data, fulldepth.Depth200, func(d *fulldepth.DepthData, remaining []byte) error {
+				_ = d.Entries
+				return nil
+			})
+		}
+	})
+}
+
+// BenchmarkWithCopyDepthData benchmarks creating a copy of depth data (for retention)
+func BenchmarkWithCopyDepthData(b *testing.B) {
+	data := createDepth20BidPacket()
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		var retained fulldepth.DepthData
+		_ = fulldepth.WithDepthData(data, fulldepth.Depth20, func(d *fulldepth.DepthData, remaining []byte) error {
+			retained = d.Copy() // User copies data to retain it
+			return nil
+		})
+		_ = retained
+	}
+}
+
+// BenchmarkWithCopyFullDepthData benchmarks creating a copy of full depth data
+func BenchmarkWithCopyFullDepthData(b *testing.B) {
+	bidData := createDepth20BidPacket()
+	askData := createDepth20AskPacket()
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		var retained fulldepth.FullDepthData
+		_ = fulldepth.WithFullDepthData(bidData, askData, fulldepth.Depth20, func(f *fulldepth.FullDepthData) error {
+			retained = f.Copy() // User copies data to retain it
+			return nil
+		})
+		_ = retained
 	}
 }

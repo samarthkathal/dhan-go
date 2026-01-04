@@ -16,6 +16,26 @@ cd examples/rest/01_basic
 go run main.go
 ```
 
+## Callback Data Lifecycle
+
+**Important**: In WebSocket callbacks, data pointers are only valid during callback execution. The SDK uses object pooling for zero-allocation parsing, so data may be reused after the callback returns.
+
+**To retain data beyond the callback**, you must copy it:
+
+```go
+// marketfeed - shallow copy works (all value types)
+marketfeed.WithTickerCallback(func(data *marketfeed.TickerData) {
+    myTicker := *data  // Safe: all fields are value types
+})
+
+// fulldepth - use Copy() method (has slices)
+fulldepth.WithDepthCallback(func(data *fulldepth.FullDepthData) {
+    myDepth := data.Copy()  // Required: slices need deep copy
+})
+```
+
+See `marketfeed/04_with_metrics` and `fulldepth/03_data_retention` for complete examples.
+
 ## Examples
 
 ### REST API (`rest/`)
@@ -38,6 +58,7 @@ go run main.go
 | 01_basic_ticker | Simple ticker subscription |
 | 02_all_data_types | Ticker, Quote, OI, PrevClose, Full callbacks |
 | 03_custom_config | Custom timeouts, buffers |
+| 04_with_metrics | **Data retention pattern** - storing data from callbacks |
 | 05_with_middleware | Logging, recovery middleware |
 | 06_pooled_basic | PooledClient for multiple connections |
 | 07_pooled_high_volume | Subscribe to 100+ instruments |
@@ -58,6 +79,7 @@ go run main.go
 |---------|-------------|
 | 01_basic | 20-level market depth |
 | 02_200_depth | 200-level market depth (NSE only) |
+| 03_data_retention | **Data retention with Copy()** - order book tracking |
 
 ### Combined (`combined/`)
 

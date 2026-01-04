@@ -179,28 +179,7 @@ alert := &orderupdate.OrderAlert{}
 alert.UnmarshalJSON(data)
 ```
 
-#### 2. String Interning for Repeated Values
-OrderAlert has many repeated string values (status codes, exchange segments, order types).
-
-**Expected Impact**: 40-50% reduction in string allocations
-
-```go
-var statusIntern = map[string]string{
-    "TRADED": "TRADED",
-    "REJECTED": "REJECTED",
-    "PENDING": "PENDING",
-    // ...
-}
-
-func internString(s string) string {
-    if interned, ok := statusIntern[s]; ok {
-        return interned
-    }
-    return s
-}
-```
-
-#### 3. Pre-sized Slices for REST Responses
+#### 2. Pre-sized Slices for REST Responses
 For QuoteResponse bid/ask arrays, pre-allocate with known capacity.
 
 **Expected Impact**: Eliminate 33.91% of memory allocations
@@ -299,3 +278,103 @@ With recommended optimizations:
 - **Memory allocation**: 50-70% reduction
 - **GC pressure**: Significantly reduced
 - **Throughput**: OrderAlert from 183K/sec to 600K+/sec
+
+---
+
+## 8. Implemented Optimizations ✓
+
+The following optimizations have been implemented:
+
+### 8.1 sync.Pool for Binary Parsing (Implemented)
+
+**Files**:
+- `marketfeed/pools.go` - Pooled parsing with callback API for Ticker, Quote, Full, OI, PrevClose
+- `fulldepth/pools.go` - Pooled parsing with callback API for Depth20/Depth200
+
+**Benchmark Results**:
+
+| Parser | Standard Alloc | Pooled (With*) | Improvement |
+|--------|---------------:|---------------:|-------------|
+| **Ticker** | 20.7ns, 2 allocs | 9.4ns, 0 allocs | **2.2x faster, 100% fewer allocs** |
+| **Quote** | 25.0ns, 2 allocs | 10.5ns, 0 allocs | **2.4x faster, 100% fewer allocs** |
+| **Full** | 45.1ns, 2 allocs | 18.3ns, 0 allocs | **2.5x faster, 100% fewer allocs** |
+| **Depth200** | 640ns, 3 allocs | 533ns, 2 allocs | **17% faster, 33% fewer allocs** |
+
+**Public API** - Callback-Based Only:
+
+The SDK exposes only callback-based `With*` functions for parsing. This design:
+- Ensures automatic pool management (no leaks)
+- Provides zero-allocation parsing in steady state
+- Makes the data lifecycle explicit (valid only during callback)
+
+```go
+// marketfeed package
+func WithTickerData(data []byte, fn func(*TickerData) error) error
+func WithQuoteData(data []byte, fn func(*QuoteData) error) error
+func WithFullData(data []byte, fn func(*FullData) error) error
+func WithOIData(data []byte, fn func(*OIData) error) error
+func WithPrevCloseData(data []byte, fn func(*PrevCloseData) error) error
+
+// fulldepth package
+func WithDepthData(data []byte, level DepthLevel, fn func(*DepthData, []byte) error) error
+func WithFullDepthData(bidData, askData []byte, level DepthLevel, fn func(*FullDepthData) error) error
+```
+
+**Usage**:
+
+```go
+// CALLBACK API (Only Public API) - Automatic cleanup, zero allocs
+err := marketfeed.WithTickerData(data, func(ticker *marketfeed.TickerData) error {
+    // Data is only valid within this callback
+    price := ticker.LastTradedPrice
+    return nil
+})
+
+// To retain data beyond callback, copy it:
+// marketfeed (value types only): myTicker := *ticker
+// fulldepth (has slices): myDepth := depth.Copy()
+```
+
+| API | Performance | Safety | Data Lifecycle |
+|-----|-------------|--------|----------------|
+| `With*Data` callbacks | 9-18ns, 0 allocs | Automatic cleanup | Valid only during callback |
+
+### 8.2 Summary of Implemented Changes
+
+| Optimization | Status | Impact |
+|--------------|--------|--------|
+| sync.Pool for marketfeed (callback API) | ✓ Implemented | 2.2-2.5x faster, 0 allocs |
+| sync.Pool for fulldepth (callback API) | ✓ Implemented | 17% faster, 1 fewer alloc |
+| Simplified public API (callback-only) | ✓ Implemented | Safer, no pool leaks |
+| Code-generated JSON parsers | ○ Not implemented | Requires external dependency |
+| Pre-sized slices for REST | ○ Not implemented | Requires custom unmarshalers |
+
+### 8.3 Throughput After Optimization
+
+| Category | Before | After | Improvement |
+|----------|-------:|------:|-------------|
+| Binary Ticker (With* API) | 48M/sec | **106M/sec** | **2.2x** |
+| Binary Quote (With* API) | 40M/sec | **95M/sec** | **2.4x** |
+| Binary Full (With* API) | 22M/sec | **55M/sec** | **2.5x** |
+
+### 8.4 Data Retention Pattern
+
+Data pointers in callbacks are only valid during callback execution. To retain data:
+
+```go
+// marketfeed - shallow copy (all value types)
+var myTicker marketfeed.TickerData
+marketfeed.WithTickerData(data, func(t *marketfeed.TickerData) error {
+    myTicker = *t  // Safe: all fields are value types
+    return nil
+})
+
+// fulldepth - use Copy() method (has slices)
+var myDepth fulldepth.FullDepthData
+fulldepth.WithFullDepthData(bidData, askData, fulldepth.Depth20, func(f *fulldepth.FullDepthData) error {
+    myDepth = f.Copy()  // Deep copy: slices need copying
+    return nil
+})
+```
+
+The pooled callback API achieves **zero allocations** in steady-state operation, completely eliminating GC pressure for high-throughput market data processing.

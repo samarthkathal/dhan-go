@@ -149,6 +149,37 @@ client, _ := marketfeed.NewClient(
 )
 ```
 
+## Callback Data Lifecycle
+
+In WebSocket callbacks, **data is only valid during callback execution**. The SDK uses object pooling internally for zero-allocation parsing, so data pointers may be reused after the callback returns.
+
+**To retain data beyond the callback**, copy it:
+
+```go
+// marketfeed - shallow copy works (all value types)
+var myTicker marketfeed.TickerData
+client, _ := marketfeed.NewClient(token,
+    marketfeed.WithTickerCallback(func(data *marketfeed.TickerData) {
+        myTicker = *data  // Safe: all fields are value types
+    }),
+)
+
+// fulldepth - use Copy() method (has slices)
+var myDepth fulldepth.FullDepthData
+client, _ := fulldepth.NewClient(token, clientID,
+    fulldepth.WithDepthCallback(func(data *fulldepth.FullDepthData) {
+        myDepth = data.Copy()  // Deep copy: slices need copying
+    }),
+)
+```
+
+**Why this design?**
+- Zero allocations in steady-state operation
+- 2-3x faster than traditional parsing
+- Eliminates GC pressure for high-throughput market data
+
+See [PROFILING_REPORT.md](./PROFILING_REPORT.md) for benchmarks.
+
 ## Examples
 
 See the [examples](./examples) directory for complete working examples:

@@ -99,163 +99,180 @@ func createPrevClosePacket() []byte {
 	return data
 }
 
-// BenchmarkParseTickerData benchmarks ticker parsing
-func BenchmarkParseTickerData(b *testing.B) {
+// BenchmarkWithTickerData benchmarks the callback-based ticker parsing API
+func BenchmarkWithTickerData(b *testing.B) {
 	data := createTickerPacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := marketfeed.ParseTickerData(data)
+		err := marketfeed.WithTickerData(data, func(t *marketfeed.TickerData) error {
+			_ = t.LastTradedPrice
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkParseQuoteData benchmarks quote parsing
-func BenchmarkParseQuoteData(b *testing.B) {
+// BenchmarkWithQuoteData benchmarks the callback-based quote parsing API
+func BenchmarkWithQuoteData(b *testing.B) {
 	data := createQuotePacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := marketfeed.ParseQuoteData(data)
+		err := marketfeed.WithQuoteData(data, func(q *marketfeed.QuoteData) error {
+			_ = q.LastTradedPrice
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkParseFullData benchmarks full data parsing
-func BenchmarkParseFullData(b *testing.B) {
-	data := createFullPacket()
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		_, err := marketfeed.ParseFullData(data)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkParseOIData benchmarks OI parsing
-func BenchmarkParseOIData(b *testing.B) {
+// BenchmarkWithOIData benchmarks the callback-based OI parsing API
+func BenchmarkWithOIData(b *testing.B) {
 	data := createOIPacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := marketfeed.ParseOIData(data)
+		err := marketfeed.WithOIData(data, func(o *marketfeed.OIData) error {
+			_ = o.OpenInterest
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkParsePrevCloseData benchmarks prev close parsing
-func BenchmarkParsePrevCloseData(b *testing.B) {
+// BenchmarkWithPrevCloseData benchmarks the callback-based prev close parsing API
+func BenchmarkWithPrevCloseData(b *testing.B) {
 	data := createPrevClosePacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := marketfeed.ParsePrevCloseData(data)
+		err := marketfeed.WithPrevCloseData(data, func(p *marketfeed.PrevCloseData) error {
+			_ = p.PreviousClosePrice
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkParseMarketFeedHeader benchmarks header parsing
-func BenchmarkParseMarketFeedHeader(b *testing.B) {
-	data := createTickerPacket()
+// BenchmarkWithFullData benchmarks the callback-based full data parsing API
+func BenchmarkWithFullData(b *testing.B) {
+	data := createFullPacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := marketfeed.ParseMarketFeedHeader(data)
+		err := marketfeed.WithFullData(data, func(f *marketfeed.FullData) error {
+			_ = f.LastTradedPrice
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkParseTickerDataParallel benchmarks parallel ticker parsing
-func BenchmarkParseTickerDataParallel(b *testing.B) {
+// BenchmarkWithHighVolumeParsing simulates high-volume parsing (1000 messages)
+func BenchmarkWithHighVolumeParsing(b *testing.B) {
+	// Create a mix of message types
+	packets := make([][]byte, 1000)
+	types := make([]byte, 1000)
+	for i := 0; i < 1000; i++ {
+		switch i % 5 {
+		case 0:
+			packets[i] = createTickerPacket()
+			types[i] = marketfeed.FeedCodeTicker
+		case 1:
+			packets[i] = createQuotePacket()
+			types[i] = marketfeed.FeedCodeQuote
+		case 2:
+			packets[i] = createOIPacket()
+			types[i] = marketfeed.FeedCodeOI
+		case 3:
+			packets[i] = createPrevClosePacket()
+			types[i] = marketfeed.FeedCodePrevClose
+		case 4:
+			packets[i] = createFullPacket()
+			types[i] = marketfeed.FeedCodeFull
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		for j, data := range packets {
+			switch types[j] {
+			case marketfeed.FeedCodeTicker:
+				_ = marketfeed.WithTickerData(data, func(t *marketfeed.TickerData) error {
+					_ = t.LastTradedPrice
+					return nil
+				})
+			case marketfeed.FeedCodeQuote:
+				_ = marketfeed.WithQuoteData(data, func(q *marketfeed.QuoteData) error {
+					_ = q.LastTradedPrice
+					return nil
+				})
+			case marketfeed.FeedCodeOI:
+				_ = marketfeed.WithOIData(data, func(o *marketfeed.OIData) error {
+					_ = o.OpenInterest
+					return nil
+				})
+			case marketfeed.FeedCodePrevClose:
+				_ = marketfeed.WithPrevCloseData(data, func(p *marketfeed.PrevCloseData) error {
+					_ = p.PreviousClosePrice
+					return nil
+				})
+			case marketfeed.FeedCodeFull:
+				_ = marketfeed.WithFullData(data, func(f *marketfeed.FullData) error {
+					_ = f.LastTradedPrice
+					return nil
+				})
+			}
+		}
+	}
+}
+
+// BenchmarkWithTickerDataParallel benchmarks parallel callback-based ticker parsing
+func BenchmarkWithTickerDataParallel(b *testing.B) {
 	data := createTickerPacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := marketfeed.ParseTickerData(data)
-			if err != nil {
-				b.Fatal(err)
-			}
+			_ = marketfeed.WithTickerData(data, func(t *marketfeed.TickerData) error {
+				_ = t.LastTradedPrice
+				return nil
+			})
 		}
 	})
 }
 
-// BenchmarkParseFullDataParallel benchmarks parallel full data parsing
-func BenchmarkParseFullDataParallel(b *testing.B) {
+// BenchmarkWithFullDataParallel benchmarks parallel callback-based full data parsing
+func BenchmarkWithFullDataParallel(b *testing.B) {
 	data := createFullPacket()
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := marketfeed.ParseFullData(data)
-			if err != nil {
-				b.Fatal(err)
-			}
+			_ = marketfeed.WithFullData(data, func(f *marketfeed.FullData) error {
+				_ = f.LastTradedPrice
+				return nil
+			})
 		}
 	})
-}
-
-// BenchmarkHighVolumeParsing simulates high-volume parsing (1000 messages)
-func BenchmarkHighVolumeParsing(b *testing.B) {
-	// Create a mix of message types
-	packets := make([][]byte, 1000)
-	for i := 0; i < 1000; i++ {
-		switch i % 5 {
-		case 0:
-			packets[i] = createTickerPacket()
-		case 1:
-			packets[i] = createQuotePacket()
-		case 2:
-			packets[i] = createOIPacket()
-		case 3:
-			packets[i] = createPrevClosePacket()
-		case 4:
-			packets[i] = createFullPacket()
-		}
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		for _, data := range packets {
-			header, err := marketfeed.ParseMarketFeedHeader(data)
-			if err != nil {
-				b.Fatal(err)
-			}
-
-			switch header.ResponseCode {
-			case marketfeed.FeedCodeTicker:
-				_, _ = marketfeed.ParseTickerData(data)
-			case marketfeed.FeedCodeQuote:
-				_, _ = marketfeed.ParseQuoteData(data)
-			case marketfeed.FeedCodeOI:
-				_, _ = marketfeed.ParseOIData(data)
-			case marketfeed.FeedCodePrevClose:
-				_, _ = marketfeed.ParsePrevCloseData(data)
-			case marketfeed.FeedCodeFull:
-				_, _ = marketfeed.ParseFullData(data)
-			}
-		}
-	}
 }

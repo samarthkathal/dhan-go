@@ -6,6 +6,11 @@
 // - Receiving real-time LTP updates via callbacks
 // - Proper field access (Header.SecurityID, LastTradedPrice, etc.)
 //
+// Note on data lifecycle:
+// Callback data pointers are only valid during callback execution.
+// To retain data beyond the callback, copy it: myTicker := *data
+// See 04_with_metrics example for data retention patterns.
+//
 // Prerequisites:
 // - Set DHAN_ACCESS_TOKEN environment variable
 //

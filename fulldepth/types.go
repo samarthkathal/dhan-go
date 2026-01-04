@@ -168,3 +168,23 @@ func (f *FullDepthData) GetTotalAskQuantity() int64 {
 	}
 	return total
 }
+
+// Copy returns a deep copy of DepthData.
+// Use this when you need to retain data beyond the callback scope.
+func (d *DepthData) Copy() DepthData {
+	cp := *d
+	cp.Entries = make([]DepthEntry, len(d.Entries))
+	copy(cp.Entries, d.Entries)
+	return cp
+}
+
+// Copy returns a deep copy of FullDepthData.
+// Use this when you need to retain data beyond the callback scope.
+func (f *FullDepthData) Copy() FullDepthData {
+	cp := *f
+	cp.Bids = make([]DepthEntry, len(f.Bids))
+	copy(cp.Bids, f.Bids)
+	cp.Asks = make([]DepthEntry, len(f.Asks))
+	copy(cp.Asks, f.Asks)
+	return cp
+}

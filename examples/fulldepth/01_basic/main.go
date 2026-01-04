@@ -5,6 +5,11 @@
 // - Subscribing to instruments
 // - Receiving depth updates via callbacks
 //
+// Note on data lifecycle:
+// Callback data pointers are only valid during callback execution.
+// To retain data beyond the callback, use Copy(): myDepth := data.Copy()
+// See 03_data_retention example for data retention patterns.
+//
 // Prerequisites:
 // - Set DHAN_ACCESS_TOKEN and DHAN_CLIENT_ID environment variables
 //

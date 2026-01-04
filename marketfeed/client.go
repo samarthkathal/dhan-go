@@ -214,59 +214,61 @@ func (c *PooledClient) Disconnect() error {
 }
 
 // handleMessage processes incoming WebSocket messages
+// Data pointers passed to callbacks are only valid during callback execution.
+// If you need to retain data, copy the struct: myTicker := *ticker
 func (c *PooledClient) handleMessage(ctx context.Context, data []byte) error {
-	if len(data) < 8 {
-		return fmt.Errorf("message too short: %d bytes", len(data))
+	if len(data) < 1 {
+		return fmt.Errorf("empty data received")
 	}
 
-	// Parse header
-	header, err := ParseMarketFeedHeader(data)
-	if err != nil {
-		c.notifyError(err)
-		return err
-	}
+	responseCode := data[0]
 
-	// Route based on response code
-	switch header.ResponseCode {
+	// Route based on response code using pooled parsers
+	switch responseCode {
 	case FeedCodeTicker:
-		ticker, err := ParseTickerData(data)
+		ticker, err := parseTickerDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyTicker(ticker)
+		releaseTicker(ticker)
 
 	case FeedCodeQuote:
-		quote, err := ParseQuoteData(data)
+		quote, err := parseQuoteDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyQuote(quote)
+		releaseQuote(quote)
 
 	case FeedCodeOI:
-		oi, err := ParseOIData(data)
+		oi, err := parseOIDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyOI(oi)
+		releaseOI(oi)
 
 	case FeedCodePrevClose:
-		prevClose, err := ParsePrevCloseData(data)
+		prevClose, err := parsePrevCloseDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyPrevClose(prevClose)
+		releasePrevClose(prevClose)
 
 	case FeedCodeFull:
-		full, err := ParseFullData(data)
+		full, err := parseFullDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyFull(full)
+		releaseFull(full)
 
 	case FeedCodeError:
 		err := fmt.Errorf("feed error code received")
@@ -274,7 +276,7 @@ func (c *PooledClient) handleMessage(ctx context.Context, data []byte) error {
 		return err
 
 	default:
-		err := fmt.Errorf("unknown response code: %d", header.ResponseCode)
+		err := fmt.Errorf("unknown response code: %d", responseCode)
 		c.notifyError(err)
 		return err
 	}
@@ -521,59 +523,61 @@ func (c *Client) Disconnect() error {
 }
 
 // handleMessage processes incoming WebSocket messages
+// Data pointers passed to callbacks are only valid during callback execution.
+// If you need to retain data, copy the struct: myTicker := *ticker
 func (c *Client) handleMessage(ctx context.Context, data []byte) error {
-	if len(data) < 8 {
-		return fmt.Errorf("message too short: %d bytes", len(data))
+	if len(data) < 1 {
+		return fmt.Errorf("empty data received")
 	}
 
-	// Parse header
-	header, err := ParseMarketFeedHeader(data)
-	if err != nil {
-		c.notifyError(err)
-		return err
-	}
+	responseCode := data[0]
 
-	// Route based on response code
-	switch header.ResponseCode {
+	// Route based on response code using pooled parsers
+	switch responseCode {
 	case FeedCodeTicker:
-		ticker, err := ParseTickerData(data)
+		ticker, err := parseTickerDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyTicker(ticker)
+		releaseTicker(ticker)
 
 	case FeedCodeQuote:
-		quote, err := ParseQuoteData(data)
+		quote, err := parseQuoteDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyQuote(quote)
+		releaseQuote(quote)
 
 	case FeedCodeOI:
-		oi, err := ParseOIData(data)
+		oi, err := parseOIDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyOI(oi)
+		releaseOI(oi)
 
 	case FeedCodePrevClose:
-		prevClose, err := ParsePrevCloseData(data)
+		prevClose, err := parsePrevCloseDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyPrevClose(prevClose)
+		releasePrevClose(prevClose)
 
 	case FeedCodeFull:
-		full, err := ParseFullData(data)
+		full, err := parseFullDataPooled(data)
 		if err != nil {
 			c.notifyError(err)
 			return err
 		}
 		c.notifyFull(full)
+		releaseFull(full)
 
 	case FeedCodeError:
 		err := fmt.Errorf("feed error code received")
@@ -581,7 +585,7 @@ func (c *Client) handleMessage(ctx context.Context, data []byte) error {
 		return err
 
 	default:
-		err := fmt.Errorf("unknown response code: %d", header.ResponseCode)
+		err := fmt.Errorf("unknown response code: %d", responseCode)
 		c.notifyError(err)
 		return err
 	}

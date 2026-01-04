@@ -1,9 +1,7 @@
 package benchmarks
 
 import (
-	"encoding/binary"
 	"encoding/json"
-	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,35 +12,22 @@ import (
 )
 
 // BenchmarkE2ETickerFlow simulates end-to-end ticker data flow
-// Parse binary message -> route by type -> dispatch callback
+// Parse binary message -> dispatch callback (using With* API)
 func BenchmarkE2ETickerFlow(b *testing.B) {
 	tickerData := createTickerPacket()
 	var callbackCount atomic.Int64
-
-	// Simulate callback
-	callback := func(data *marketfeed.TickerData) {
-		callbackCount.Add(1)
-		_ = data.LastTradedPrice
-	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		// Parse header
-		header, err := marketfeed.ParseMarketFeedHeader(tickerData)
+		err := marketfeed.WithTickerData(tickerData, func(t *marketfeed.TickerData) error {
+			callbackCount.Add(1)
+			_ = t.LastTradedPrice
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
-		}
-
-		// Route by type
-		if header.ResponseCode == marketfeed.FeedCodeTicker {
-			ticker, err := marketfeed.ParseTickerData(tickerData)
-			if err != nil {
-				b.Fatal(err)
-			}
-			// Dispatch callback (inline, no goroutine for benchmark accuracy)
-			callback(ticker)
 		}
 	}
 }
@@ -52,68 +37,41 @@ func BenchmarkE2EQuoteFlow(b *testing.B) {
 	quoteData := createQuotePacket()
 	var callbackCount atomic.Int64
 
-	callback := func(data *marketfeed.QuoteData) {
-		callbackCount.Add(1)
-		_ = data.Volume
-	}
-
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		header, err := marketfeed.ParseMarketFeedHeader(quoteData)
+		err := marketfeed.WithQuoteData(quoteData, func(q *marketfeed.QuoteData) error {
+			callbackCount.Add(1)
+			_ = q.Volume
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
-		}
-
-		if header.ResponseCode == marketfeed.FeedCodeQuote {
-			quote, err := marketfeed.ParseQuoteData(quoteData)
-			if err != nil {
-				b.Fatal(err)
-			}
-			callback(quote)
 		}
 	}
 }
 
 // BenchmarkE2EFullDepthFlow simulates full depth data flow
-// Parse bid -> parse ask -> combine -> dispatch
+// Parse bid + ask -> combine -> dispatch (using WithFullDepthData)
 func BenchmarkE2EFullDepthFlow(b *testing.B) {
 	bidData := createDepth20BidPacket()
 	askData := createDepth20AskPacket()
 	var callbackCount atomic.Int64
 
-	callback := func(data *fulldepth.FullDepthData) {
-		callbackCount.Add(1)
-		_, _ = data.GetBestBid()
-		_, _ = data.GetBestAsk()
-	}
-
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		// Parse bid
-		bid, _, err := fulldepth.ParseDepthData(bidData, fulldepth.Depth20)
+		err := fulldepth.WithFullDepthData(bidData, askData, fulldepth.Depth20, func(f *fulldepth.FullDepthData) error {
+			callbackCount.Add(1)
+			_, _ = f.GetBestBid()
+			_, _ = f.GetBestAsk()
+			return nil
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
-
-		// Parse ask
-		ask, _, err := fulldepth.ParseDepthData(askData, fulldepth.Depth20)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		// Combine
-		combined := &fulldepth.FullDepthData{
-			ExchangeSegment: bid.Header.ExchangeSegment,
-			SecurityID:      bid.Header.SecurityID,
-			Bids:            bid.Entries,
-			Asks:            ask.Entries,
-		}
-
-		callback(combined)
 	}
 }
 
@@ -187,31 +145,37 @@ func BenchmarkE2EHighVolumeFlow(b *testing.B) {
 		for _, msg := range messages {
 			switch msg.msgType {
 			case marketfeed.FeedCodeTicker:
-				if _, err := marketfeed.ParseTickerData(msg.data); err == nil {
+				_ = marketfeed.WithTickerData(msg.data, func(t *marketfeed.TickerData) error {
 					processed.Add(1)
-				}
+					return nil
+				})
 			case marketfeed.FeedCodeQuote:
-				if _, err := marketfeed.ParseQuoteData(msg.data); err == nil {
+				_ = marketfeed.WithQuoteData(msg.data, func(q *marketfeed.QuoteData) error {
 					processed.Add(1)
-				}
+					return nil
+				})
 			case marketfeed.FeedCodeOI:
-				if _, err := marketfeed.ParseOIData(msg.data); err == nil {
+				_ = marketfeed.WithOIData(msg.data, func(o *marketfeed.OIData) error {
 					processed.Add(1)
-				}
+					return nil
+				})
 			case marketfeed.FeedCodePrevClose:
-				if _, err := marketfeed.ParsePrevCloseData(msg.data); err == nil {
+				_ = marketfeed.WithPrevCloseData(msg.data, func(p *marketfeed.PrevCloseData) error {
 					processed.Add(1)
-				}
+					return nil
+				})
 			case marketfeed.FeedCodeFull:
-				if _, err := marketfeed.ParseFullData(msg.data); err == nil {
+				_ = marketfeed.WithFullData(msg.data, func(f *marketfeed.FullData) error {
 					processed.Add(1)
-				}
+					return nil
+				})
 			}
 		}
 	}
 }
 
 // BenchmarkCallbackDispatchGoroutine benchmarks goroutine spawn overhead
+// Shows overhead of spawning goroutines vs inline processing
 func BenchmarkCallbackDispatchGoroutine(b *testing.B) {
 	tickerData := createTickerPacket()
 	var wg sync.WaitGroup
@@ -220,13 +184,16 @@ func BenchmarkCallbackDispatchGoroutine(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		ticker, _ := marketfeed.ParseTickerData(tickerData)
-
-		wg.Add(1)
-		go func(t *marketfeed.TickerData) {
-			defer wg.Done()
-			_ = t.LastTradedPrice
-		}(ticker)
+		_ = marketfeed.WithTickerData(tickerData, func(t *marketfeed.TickerData) error {
+			// Copy data since we're passing to goroutine (data only valid in callback)
+			tickerCopy := *t
+			wg.Add(1)
+			go func(ticker marketfeed.TickerData) {
+				defer wg.Done()
+				_ = ticker.LastTradedPrice
+			}(tickerCopy)
+			return nil
+		})
 	}
 
 	wg.Wait()
@@ -240,9 +207,11 @@ func BenchmarkCallbackDispatchInline(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		ticker, _ := marketfeed.ParseTickerData(tickerData)
-		// Inline processing
-		_ = ticker.LastTradedPrice
+		_ = marketfeed.WithTickerData(tickerData, func(t *marketfeed.TickerData) error {
+			// Inline processing - no need to copy since we use it within callback
+			_ = t.LastTradedPrice
+			return nil
+		})
 	}
 }
 
@@ -255,11 +224,10 @@ func BenchmarkE2EParallelProcessing(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			header, _ := marketfeed.ParseMarketFeedHeader(tickerData)
-			if header.ResponseCode == marketfeed.FeedCodeTicker {
-				ticker, _ := marketfeed.ParseTickerData(tickerData)
-				_ = ticker.LastTradedPrice
-			}
+			_ = marketfeed.WithTickerData(tickerData, func(t *marketfeed.TickerData) error {
+				_ = t.LastTradedPrice
+				return nil
+			})
 		}
 	})
 }
@@ -274,16 +242,10 @@ func BenchmarkE2EDepthParallelProcessing(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			bid, _, _ := fulldepth.ParseDepthData(bidData, fulldepth.Depth20)
-			ask, _, _ := fulldepth.ParseDepthData(askData, fulldepth.Depth20)
-
-			combined := &fulldepth.FullDepthData{
-				ExchangeSegment: bid.Header.ExchangeSegment,
-				SecurityID:      bid.Header.SecurityID,
-				Bids:            bid.Entries,
-				Asks:            ask.Entries,
-			}
-			_ = combined.GetSpread()
+			_ = fulldepth.WithFullDepthData(bidData, askData, fulldepth.Depth20, func(f *fulldepth.FullDepthData) error {
+				_ = f.GetSpread()
+				return nil
+			})
 		}
 	})
 }
@@ -297,30 +259,32 @@ func BenchmarkThroughputEstimate(b *testing.B) {
 
 	// Process as many messages as possible
 	for i := 0; i < b.N; i++ {
-		_, _ = marketfeed.ParseTickerData(tickerData)
+		_ = marketfeed.WithTickerData(tickerData, func(t *marketfeed.TickerData) error {
+			_ = t.LastTradedPrice
+			return nil
+		})
 	}
 
 	// b.N iterations completed - ns/op tells us throughput
 	// If ns/op is 21ns, then throughput is ~47 million messages/second per core
 }
 
-// Helper to create 200-depth ask packet (needed for e2e tests)
-func createDepth200AskPacket() []byte {
-	numRows := 200
-	data := make([]byte, 12+numRows*16)
+// BenchmarkE2EDataRetention benchmarks the Copy() pattern for data retention
+func BenchmarkE2EDataRetention(b *testing.B) {
+	bidData := createDepth20BidPacket()
+	askData := createDepth20AskPacket()
 
-	binary.LittleEndian.PutUint16(data[0:2], uint16(len(data)))
-	data[2] = fulldepth.FeedCodeAsk
-	data[3] = 1
-	binary.LittleEndian.PutUint32(data[4:8], 11536)
-	binary.LittleEndian.PutUint32(data[8:12], uint32(numRows))
+	b.ResetTimer()
+	b.ReportAllocs()
 
-	for i := 0; i < numRows; i++ {
-		offset := 12 + i*16
-		price := 1235.00 + float64(i)*0.01
-		binary.LittleEndian.PutUint64(data[offset:offset+8], math.Float64bits(price))
-		binary.LittleEndian.PutUint32(data[offset+8:offset+12], uint32(100+i*10))
-		binary.LittleEndian.PutUint32(data[offset+12:offset+16], uint32(1+i%50))
+	for i := 0; i < b.N; i++ {
+		var retained fulldepth.FullDepthData
+		_ = fulldepth.WithFullDepthData(bidData, askData, fulldepth.Depth20, func(f *fulldepth.FullDepthData) error {
+			// Use Copy() to retain data beyond callback scope
+			retained = f.Copy()
+			return nil
+		})
+		// Use retained data outside callback
+		_ = retained.GetSpread()
 	}
-	return data
 }

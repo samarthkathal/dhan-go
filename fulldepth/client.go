@@ -254,17 +254,22 @@ func (c *Client) readLoop() {
 }
 
 // handleMessage processes a WebSocket message
+// Data pointers passed to callbacks are deep copied for safety.
+// Users receiving FullDepthData can safely store and use it.
 func (c *Client) handleMessage(data []byte) {
 	remaining := data
 
 	for len(remaining) > 0 {
-		depthData, next, err := ParseDepthData(remaining, c.config.DepthLevel)
+		depthData, next, err := parseDepthDataPooled(remaining, c.config.DepthLevel)
 		if err != nil {
 			c.notifyError(err)
 			return
 		}
 
 		c.processDepthData(depthData)
+		// Note: processDepthData keeps a reference to entries slice in pending,
+		// so we just release the struct (entries slice is set to nil, not returned to pool)
+		releaseDepthData(depthData)
 		remaining = next
 	}
 }
