@@ -151,44 +151,40 @@ This report presents a comprehensive analysis of CPU and memory bottlenecks in t
 
 ### 4.2 Performance Gap Analysis
 
-| Operation | ns/op | Relative to Ticker |
-|-----------|------:|-------------------:|
-| ParseTickerData (binary) | 20.7 | 1x (baseline) |
-| UnmarshalOrderAlert (JSON) | 5,450 | **263x slower** |
-| UnmarshalQuoteResponse (JSON) | 9,234 | **446x slower** |
-| UnmarshalOptionChain (JSON) | 12,691 | **613x slower** |
+| Operation | ns/op (before) | ns/op (after easyjson) | Improvement | Relative to Ticker |
+|-----------|---------------:|-----------------------:|------------:|-------------------:|
+| ParseTickerData (binary) | 20.7 | 20.7 | N/A | 1x (baseline) |
+| UnmarshalOrderAlert (JSON) | 5,950 | **1,347** | **4.4x faster** | 65x slower |
+| UnmarshalLTPResponse (JSON) | 3,015 | **1,077** | **2.8x faster** | 52x slower |
+| UnmarshalOHLCResponse (JSON) | 1,889 | **649** | **2.9x faster** | 31x slower |
+| UnmarshalQuoteResponse (JSON) | 9,244 | **2,913** | **3.2x faster** | 141x slower |
+| UnmarshalOptionChain (JSON) | 13,293 | **3,891** | **3.4x faster** | 188x slower |
 
 ---
 
 ## 5. Optimization Recommendations
 
-### 5.1 High Impact (Recommended)
+### 5.1 High Impact (Implemented ✓)
 
-#### 1. Use Code-Generated JSON Parsers
-Replace `encoding/json` with `easyjson` or `ffjson` for OrderAlert and REST responses.
+#### 1. Code-Generated JSON Parsers (Implemented ✓)
+Using `easyjson` for OrderAlert and REST response types. See Section 8.2 for benchmark results.
 
-**Expected Impact**: 3-5x faster JSON parsing, 50-70% fewer allocations
+**Achieved Impact**: 2.8-4.4x faster JSON parsing, 17-77% memory reduction
 
 ```go
-// Before: ~5450 ns/op, 24 allocs
+// Before: ~5950 ns/op, 21 allocs
 var alert orderupdate.OrderAlert
 json.Unmarshal(data, &alert)
 
-// After with easyjson: ~1500 ns/op, 8 allocs
+// After with easyjson: ~1347 ns/op, 17 allocs
 alert := &orderupdate.OrderAlert{}
 alert.UnmarshalJSON(data)
 ```
 
 #### 2. Pre-sized Slices for REST Responses
-For QuoteResponse bid/ask arrays, pre-allocate with known capacity.
+easyjson generates optimized code that reduces slice growth allocations. Further pre-allocation possible if needed.
 
-**Expected Impact**: Eliminate 33.91% of memory allocations
-
-```go
-// In custom unmarshaler:
-quote.Bid = make([]BidAsk, 0, 5) // Always 5 levels
-quote.Ask = make([]BidAsk, 0, 5)
-```
+**Status**: Partially addressed by easyjson implementation
 
 ### 5.2 Medium Impact
 
@@ -264,20 +260,21 @@ The binary parsers (`ParseTickerData`, `ParseQuoteData`, etc.) are already highl
 3. **String allocation is the #1 memory issue** - 69.91% of JSON allocations are strings
 4. **Reflection overhead is significant** - Type lookups and slice growth add substantial overhead
 
-### Recommended Priority
+### Recommended Priority (Updated)
 
-1. Replace `encoding/json` with code-generated parsers for OrderAlert and REST types
-2. Implement string interning for repeated values
-3. Pre-allocate slices in custom unmarshalers
-4. Consider struct pooling for high-frequency paths
+1. ✓ Replace `encoding/json` with code-generated parsers - **DONE (easyjson)**
+2. ✓ Implement struct pooling for high-frequency paths - **DONE (sync.Pool)**
+3. ○ String interning for repeated values - Skipped (minimal benefit measured)
+4. ○ Pre-allocate slices in custom unmarshalers - Partially done via easyjson
 
-### Expected Improvement
+### Achieved Improvements
 
-With recommended optimizations:
-- **JSON parsing**: 3-5x faster (5.4µs → 1.5µs)
-- **Memory allocation**: 50-70% reduction
-- **GC pressure**: Significantly reduced
-- **Throughput**: OrderAlert from 183K/sec to 600K+/sec
+With implemented optimizations:
+- **Binary parsing**: 2.2-2.5x faster with callback API (0 allocations in steady state)
+- **JSON parsing**: 2.8-4.4x faster with easyjson
+- **Memory allocation**: 14-77% reduction in JSON parsing
+- **GC pressure**: Significantly reduced for both binary and JSON
+- **Throughput**: OrderAlert from 168K/sec to **742K/sec** (4.4x improvement)
 
 ---
 
@@ -339,25 +336,69 @@ err := marketfeed.WithTickerData(data, func(ticker *marketfeed.TickerData) error
 |-----|-------------|--------|----------------|
 | `With*Data` callbacks | 9-18ns, 0 allocs | Automatic cleanup | Valid only during callback |
 
-### 8.2 Summary of Implemented Changes
+### 8.2 Code-Generated JSON Parsers with easyjson (Implemented ✓)
+
+**Files**:
+- `orderupdate/types.go` - Added `//go:generate easyjson -all types.go`
+- `orderupdate/types_easyjson.go` - Generated fast JSON parser
+- `rest/types.go` - Added `//go:generate easyjson -all types.go`
+- `rest/types_easyjson.go` - Generated fast JSON parser
+
+**Benchmark Results** (comparing easyjson vs standard library json):
+
+| Type | StdJSON ns/op | EasyJSON ns/op | Speedup | StdJSON B/op | EasyJSON B/op | Memory Saved |
+|------|-------------:|--------------:|--------:|-------------:|--------------:|-------------:|
+| **OrderAlert** | 5,952 | 1,347 | **4.4x** | 808 | 184 | **77%** |
+| **LTPResponse** | 3,015 | 1,077 | **2.8x** | 1,520 | 1,304 | **14%** |
+| **OHLCResponse** | 1,889 | 649 | **2.9x** | 1,128 | 904 | **20%** |
+| **QuoteResponse** | 9,244 | 2,913 | **3.2x** | 1,696 | 1,408 | **17%** |
+| **OptionChainResponse** | 13,293 | 3,891 | **3.4x** | 1,168 | 872 | **25%** |
+
+**Allocation Improvements**:
+
+| Type | StdJSON allocs | EasyJSON allocs | Reduction |
+|------|---------------:|----------------:|----------:|
+| OrderAlert | 21 | 17 | 19% |
+| LTPResponse | 20 | 15 | 25% |
+| OHLCResponse | 12 | 7 | 42% |
+| QuoteResponse | 21 | 15 | 29% |
+| OptionChainResponse | 15 | 9 | 40% |
+
+**Usage**:
+```go
+// orderupdate - automatic usage via parse.go
+alert, err := orderupdate.ParseOrderAlert(data)  // Uses easyjson internally
+
+// rest/client.go - automatic usage for all market data APIs
+resp, err := client.GetLTP(ctx, request)         // Uses easyjson internally
+resp, err := client.GetOHLC(ctx, request)
+resp, err := client.GetQuote(ctx, request)
+resp, err := client.GetOptionChain(ctx, ...)
+resp, err := client.GetExpiryList(ctx, ...)
+```
+
+### 8.3 Summary of Implemented Changes
 
 | Optimization | Status | Impact |
 |--------------|--------|--------|
 | sync.Pool for marketfeed (callback API) | ✓ Implemented | 2.2-2.5x faster, 0 allocs |
 | sync.Pool for fulldepth (callback API) | ✓ Implemented | 17% faster, 1 fewer alloc |
 | Simplified public API (callback-only) | ✓ Implemented | Safer, no pool leaks |
-| Code-generated JSON parsers | ○ Not implemented | Requires external dependency |
-| Pre-sized slices for REST | ○ Not implemented | Requires custom unmarshalers |
+| Code-generated JSON parsers (easyjson) | ✓ Implemented | 2.8-4.4x faster, 14-77% less memory |
+| Pre-sized slices for REST | Partially (via easyjson) | Optimized by generated code |
 
-### 8.3 Throughput After Optimization
+### 8.4 Throughput After Optimization
 
 | Category | Before | After | Improvement |
 |----------|-------:|------:|-------------|
 | Binary Ticker (With* API) | 48M/sec | **106M/sec** | **2.2x** |
 | Binary Quote (With* API) | 40M/sec | **95M/sec** | **2.4x** |
 | Binary Full (With* API) | 22M/sec | **55M/sec** | **2.5x** |
+| JSON OrderAlert (easyjson) | 168K/sec | **742K/sec** | **4.4x** |
+| JSON QuoteResponse (easyjson) | 108K/sec | **343K/sec** | **3.2x** |
+| JSON OptionChain (easyjson) | 75K/sec | **257K/sec** | **3.4x** |
 
-### 8.4 Data Retention Pattern
+### 8.5 Data Retention Pattern
 
 Data pointers in callbacks are only valid during callback execution. To retain data:
 

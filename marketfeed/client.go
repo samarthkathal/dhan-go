@@ -46,13 +46,13 @@ type PooledClient struct {
 	pool        *wsconn.Pool
 
 	// Callbacks
-	mu                sync.RWMutex
-	tickerCallbacks   []TickerCallback
-	quoteCallbacks    []QuoteCallback
-	oiCallbacks       []OICallback
+	mu                 sync.RWMutex
+	tickerCallbacks    []TickerCallback
+	quoteCallbacks     []QuoteCallback
+	oiCallbacks        []OICallback
 	prevCloseCallbacks []PrevCloseCallback
-	fullCallbacks     []FullCallback
-	errorCallbacks    []ErrorCallback
+	fullCallbacks      []FullCallback
+	errorCallbacks     []ErrorCallback
 
 	// Middleware
 	middleware middleware.WSMiddleware
@@ -271,9 +271,18 @@ func (c *PooledClient) handleMessage(ctx context.Context, data []byte) error {
 		releaseFull(full)
 
 	case FeedCodeError:
-		err := fmt.Errorf("feed error code received")
-		c.notifyError(err)
-		return err
+		errData, err := parseErrorData(data)
+		if err != nil {
+			c.notifyError(err)
+			return err
+		}
+		feedErr := fmt.Errorf("feed error: exchange=%s security=%d code=%d",
+			exchangeCodeToName(errData.Header.ExchangeSegment),
+			errData.Header.SecurityID,
+			errData.ErrorCode,
+		)
+		c.notifyError(feedErr)
+		return feedErr
 
 	default:
 		err := fmt.Errorf("unknown response code: %d", responseCode)
@@ -285,13 +294,15 @@ func (c *PooledClient) handleMessage(ctx context.Context, data []byte) error {
 }
 
 // Callback notification methods
+// Note: Callbacks are invoked synchronously because pooled data is released immediately after.
+// If callbacks need async processing, they should copy the data first.
 func (c *PooledClient) notifyTicker(data *TickerData) {
 	c.mu.RLock()
 	callbacks := c.tickerCallbacks
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -301,7 +312,7 @@ func (c *PooledClient) notifyQuote(data *QuoteData) {
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -311,7 +322,7 @@ func (c *PooledClient) notifyOI(data *OIData) {
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -321,7 +332,7 @@ func (c *PooledClient) notifyPrevClose(data *PrevCloseData) {
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -331,7 +342,7 @@ func (c *PooledClient) notifyFull(data *FullData) {
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -360,13 +371,13 @@ type Client struct {
 	conn        *wsconn.Connection
 
 	// Callbacks
-	mu                sync.RWMutex
-	tickerCallbacks   []TickerCallback
-	quoteCallbacks    []QuoteCallback
-	oiCallbacks       []OICallback
+	mu                 sync.RWMutex
+	tickerCallbacks    []TickerCallback
+	quoteCallbacks     []QuoteCallback
+	oiCallbacks        []OICallback
 	prevCloseCallbacks []PrevCloseCallback
-	fullCallbacks     []FullCallback
-	errorCallbacks    []ErrorCallback
+	fullCallbacks      []FullCallback
+	errorCallbacks     []ErrorCallback
 
 	// Middleware
 	middleware middleware.WSMiddleware
@@ -580,9 +591,18 @@ func (c *Client) handleMessage(ctx context.Context, data []byte) error {
 		releaseFull(full)
 
 	case FeedCodeError:
-		err := fmt.Errorf("feed error code received")
-		c.notifyError(err)
-		return err
+		errData, err := parseErrorData(data)
+		if err != nil {
+			c.notifyError(err)
+			return err
+		}
+		feedErr := fmt.Errorf("feed error: exchange=%s security=%d code=%d",
+			exchangeCodeToName(errData.Header.ExchangeSegment),
+			errData.Header.SecurityID,
+			errData.ErrorCode,
+		)
+		c.notifyError(feedErr)
+		return feedErr
 
 	default:
 		err := fmt.Errorf("unknown response code: %d", responseCode)
@@ -594,13 +614,15 @@ func (c *Client) handleMessage(ctx context.Context, data []byte) error {
 }
 
 // Callback notification methods
+// Note: Callbacks are invoked synchronously because pooled data is released immediately after.
+// If callbacks need async processing, they should copy the data first.
 func (c *Client) notifyTicker(data *TickerData) {
 	c.mu.RLock()
 	callbacks := c.tickerCallbacks
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -610,7 +632,7 @@ func (c *Client) notifyQuote(data *QuoteData) {
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -620,7 +642,7 @@ func (c *Client) notifyOI(data *OIData) {
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -630,7 +652,7 @@ func (c *Client) notifyPrevClose(data *PrevCloseData) {
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -640,7 +662,7 @@ func (c *Client) notifyFull(data *FullData) {
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 

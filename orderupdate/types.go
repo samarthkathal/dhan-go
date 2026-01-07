@@ -1,5 +1,7 @@
 package orderupdate
 
+//go:generate easyjson -all types.go
+
 import (
 	"time"
 )

@@ -156,8 +156,21 @@ func BenchmarkMarshalMarketQuoteRequest(b *testing.B) {
 	}
 }
 
-// BenchmarkUnmarshalLTPResponse benchmarks LTP response parsing
+// BenchmarkUnmarshalLTPResponse benchmarks LTP response parsing with easyjson
 func BenchmarkUnmarshalLTPResponse(b *testing.B) {
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		var resp rest.LTPResponse
+		if err := resp.UnmarshalJSON(sampleLTPResponseJSON); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkUnmarshalLTPResponseStdJSON benchmarks LTP response parsing with std json
+func BenchmarkUnmarshalLTPResponseStdJSON(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
@@ -169,8 +182,21 @@ func BenchmarkUnmarshalLTPResponse(b *testing.B) {
 	}
 }
 
-// BenchmarkUnmarshalOHLCResponse benchmarks OHLC response parsing
+// BenchmarkUnmarshalOHLCResponse benchmarks OHLC response parsing with easyjson
 func BenchmarkUnmarshalOHLCResponse(b *testing.B) {
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		var resp rest.OHLCResponse
+		if err := resp.UnmarshalJSON(sampleOHLCResponseJSON); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkUnmarshalOHLCResponseStdJSON benchmarks OHLC response parsing with std json
+func BenchmarkUnmarshalOHLCResponseStdJSON(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
@@ -182,8 +208,21 @@ func BenchmarkUnmarshalOHLCResponse(b *testing.B) {
 	}
 }
 
-// BenchmarkUnmarshalQuoteResponse benchmarks full quote response parsing
+// BenchmarkUnmarshalQuoteResponse benchmarks full quote response parsing with easyjson
 func BenchmarkUnmarshalQuoteResponse(b *testing.B) {
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		var resp rest.QuoteResponse
+		if err := resp.UnmarshalJSON(sampleQuoteResponseJSON); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkUnmarshalQuoteResponseStdJSON benchmarks full quote response parsing with std json
+func BenchmarkUnmarshalQuoteResponseStdJSON(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
@@ -195,8 +234,21 @@ func BenchmarkUnmarshalQuoteResponse(b *testing.B) {
 	}
 }
 
-// BenchmarkUnmarshalOptionChainResponse benchmarks option chain response parsing
+// BenchmarkUnmarshalOptionChainResponse benchmarks option chain response parsing with easyjson
 func BenchmarkUnmarshalOptionChainResponse(b *testing.B) {
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		var resp rest.OptionChainResponse
+		if err := resp.UnmarshalJSON(sampleOptionChainResponseJSON); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkUnmarshalOptionChainResponseStdJSON benchmarks option chain response parsing with std json
+func BenchmarkUnmarshalOptionChainResponseStdJSON(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
@@ -208,7 +260,7 @@ func BenchmarkUnmarshalOptionChainResponse(b *testing.B) {
 	}
 }
 
-// BenchmarkUnmarshalLTPResponseParallel benchmarks parallel LTP response parsing
+// BenchmarkUnmarshalLTPResponseParallel benchmarks parallel LTP response parsing with easyjson
 func BenchmarkUnmarshalLTPResponseParallel(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -216,14 +268,14 @@ func BenchmarkUnmarshalLTPResponseParallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			var resp rest.LTPResponse
-			if err := json.Unmarshal(sampleLTPResponseJSON, &resp); err != nil {
+			if err := resp.UnmarshalJSON(sampleLTPResponseJSON); err != nil {
 				b.Fatal(err)
 			}
 		}
 	})
 }
 
-// BenchmarkUnmarshalQuoteResponseParallel benchmarks parallel quote response parsing
+// BenchmarkUnmarshalQuoteResponseParallel benchmarks parallel quote response parsing with easyjson
 func BenchmarkUnmarshalQuoteResponseParallel(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -231,7 +283,7 @@ func BenchmarkUnmarshalQuoteResponseParallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			var resp rest.QuoteResponse
-			if err := json.Unmarshal(sampleQuoteResponseJSON, &resp); err != nil {
+			if err := resp.UnmarshalJSON(sampleQuoteResponseJSON); err != nil {
 				b.Fatal(err)
 			}
 		}

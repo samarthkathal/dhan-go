@@ -105,8 +105,8 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	// Configure dialer
 	dialer := websocket.Dialer{
-		ReadBufferSize:  c.config.ReadBufferSize,
-		WriteBufferSize: c.config.WriteBufferSize,
+		ReadBufferSize:   c.config.ReadBufferSize,
+		WriteBufferSize:  c.config.WriteBufferSize,
 		HandshakeTimeout: c.config.ConnectTimeout,
 	}
 
@@ -253,9 +253,9 @@ func (c *Client) readLoop() {
 	}
 }
 
-// handleMessage processes a WebSocket message
-// Data pointers passed to callbacks are deep copied for safety.
-// Users receiving FullDepthData can safely store and use it.
+// handleMessage processes a WebSocket message.
+// Data pointers passed to callbacks are only valid during callback execution.
+// Consumers must copy data if it needs to live beyond the callback.
 func (c *Client) handleMessage(data []byte) {
 	remaining := data
 
@@ -267,8 +267,7 @@ func (c *Client) handleMessage(data []byte) {
 		}
 
 		c.processDepthData(depthData)
-		// Note: processDepthData keeps a reference to entries slice in pending,
-		// so we just release the struct (entries slice is set to nil, not returned to pool)
+		// processDepthData transfers entry ownership to pendingDepth, so only the struct is released here.
 		releaseDepthData(depthData)
 		remaining = next
 	}
@@ -293,38 +292,48 @@ func (c *Client) processDepthData(data *DepthData) {
 
 	// Add entries to appropriate side
 	if data.IsBid {
+		pending.ExchangeSegment = data.Header.ExchangeSegment
+		pending.SecurityID = secID
+		if len(pending.Bids) > 0 {
+			releaseDepthEntries(pending.Bids)
+			pending.Bids = nil
+		}
 		pending.Bids = data.Entries
 		// Sort bids descending by price
 		sort.Slice(pending.Bids, func(i, j int) bool {
 			return pending.Bids[i].Price > pending.Bids[j].Price
 		})
 	} else {
+		pending.ExchangeSegment = data.Header.ExchangeSegment
+		pending.SecurityID = secID
+		if len(pending.Asks) > 0 {
+			releaseDepthEntries(pending.Asks)
+			pending.Asks = nil
+		}
 		pending.Asks = data.Entries
 		// Sort asks ascending by price
 		sort.Slice(pending.Asks, func(i, j int) bool {
 			return pending.Asks[i].Price < pending.Asks[j].Price
 		})
 	}
+	// Entries are now owned by pendingDepth; prevent double release.
+	data.Entries = nil
 
-	// If we have both bid and ask, notify callbacks with a deep copy
+	// If we have both bid and ask, notify callbacks with pooled data
 	if len(pending.Bids) > 0 && len(pending.Asks) > 0 {
-		// Create a deep copy for callbacks to avoid race conditions
-		notifyData := &FullDepthData{
-			ExchangeSegment: pending.ExchangeSegment,
-			SecurityID:      pending.SecurityID,
-			Bids:            make([]DepthEntry, len(pending.Bids)),
-			Asks:            make([]DepthEntry, len(pending.Asks)),
-		}
-		copy(notifyData.Bids, pending.Bids)
-		copy(notifyData.Asks, pending.Asks)
+		notifyData := acquireFullDepthData()
+		notifyData.ExchangeSegment = pending.ExchangeSegment
+		notifyData.SecurityID = pending.SecurityID
+		notifyData.Bids = pending.Bids
+		notifyData.Asks = pending.Asks
 
 		c.notifyDepth(notifyData)
 
+		releaseFullDepthData(notifyData)
+
 		// Reset pending for next update
-		c.pendingDepth[secID] = &FullDepthData{
-			ExchangeSegment: data.Header.ExchangeSegment,
-			SecurityID:      secID,
-		}
+		pending.Bids = nil
+		pending.Asks = nil
 	}
 }
 
@@ -335,7 +344,7 @@ func (c *Client) notifyDepth(data *FullDepthData) {
 	c.mu.RUnlock()
 
 	for _, cb := range callbacks {
-		go cb(data)
+		cb(data)
 	}
 }
 
@@ -352,10 +361,10 @@ func (c *Client) notifyError(err error) {
 
 // Stats returns connection statistics
 type Stats struct {
-	Connected        bool
-	DepthLevel       DepthLevel
-	InstrumentCount  int
-	URL              string
+	Connected       bool
+	DepthLevel      DepthLevel
+	InstrumentCount int
+	URL             string
 }
 
 // GetStats returns current connection statistics

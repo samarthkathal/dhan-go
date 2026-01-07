@@ -261,6 +261,26 @@ func parsePrevCloseDataPooled(data []byte) (*PrevCloseData, error) {
 	return prevClose, nil
 }
 
+// parseErrorData parses an error packet and returns structured information.
+func parseErrorData(data []byte) (*ErrorData, error) {
+	if len(data) < 10 {
+		return nil, fmt.Errorf("insufficient data for error packet: got %d bytes, need 10", len(data))
+	}
+
+	if data[0] != FeedCodeError {
+		return nil, fmt.Errorf("invalid response code for error packet: %d", data[0])
+	}
+
+	errData := &ErrorData{}
+	errData.Header.ResponseCode = data[0]
+	errData.Header.MessageLength = int16(binary.LittleEndian.Uint16(data[1:3]))
+	errData.Header.ExchangeSegment = data[3]
+	errData.Header.SecurityID = int32(binary.LittleEndian.Uint32(data[4:8]))
+	errData.ErrorCode = int16(binary.LittleEndian.Uint16(data[8:10]))
+
+	return errData, nil
+}
+
 // =============================================================================
 // SAFE CALLBACK-BASED API (Recommended for library users)
 // =============================================================================

@@ -109,8 +109,21 @@ var sampleFNOAlertJSON = []byte(`{
 	}
 }`)
 
-// BenchmarkUnmarshalOrderAlert benchmarks single alert parsing
+// BenchmarkUnmarshalOrderAlert benchmarks single alert parsing with easyjson
 func BenchmarkUnmarshalOrderAlert(b *testing.B) {
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		var alert orderupdate.OrderAlert
+		if err := alert.UnmarshalJSON(sampleOrderAlertJSON); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkUnmarshalOrderAlertStdJSON benchmarks single alert parsing with std json
+func BenchmarkUnmarshalOrderAlertStdJSON(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
@@ -122,33 +135,33 @@ func BenchmarkUnmarshalOrderAlert(b *testing.B) {
 	}
 }
 
-// BenchmarkUnmarshalRejectedAlert benchmarks rejected alert parsing
+// BenchmarkUnmarshalRejectedAlert benchmarks rejected alert parsing with easyjson
 func BenchmarkUnmarshalRejectedAlert(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
 		var alert orderupdate.OrderAlert
-		if err := json.Unmarshal(sampleRejectedAlertJSON, &alert); err != nil {
+		if err := alert.UnmarshalJSON(sampleRejectedAlertJSON); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkUnmarshalFNOAlert benchmarks F&O alert parsing
+// BenchmarkUnmarshalFNOAlert benchmarks F&O alert parsing with easyjson
 func BenchmarkUnmarshalFNOAlert(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
 		var alert orderupdate.OrderAlert
-		if err := json.Unmarshal(sampleFNOAlertJSON, &alert); err != nil {
+		if err := alert.UnmarshalJSON(sampleFNOAlertJSON); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkUnmarshalOrderAlertParallel benchmarks parallel alert parsing
+// BenchmarkUnmarshalOrderAlertParallel benchmarks parallel alert parsing with easyjson
 func BenchmarkUnmarshalOrderAlertParallel(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -156,7 +169,7 @@ func BenchmarkUnmarshalOrderAlertParallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			var alert orderupdate.OrderAlert
-			if err := json.Unmarshal(sampleOrderAlertJSON, &alert); err != nil {
+			if err := alert.UnmarshalJSON(sampleOrderAlertJSON); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -166,7 +179,7 @@ func BenchmarkUnmarshalOrderAlertParallel(b *testing.B) {
 // BenchmarkOrderAlertHelpers benchmarks helper method calls
 func BenchmarkOrderAlertHelpers(b *testing.B) {
 	var alert orderupdate.OrderAlert
-	if err := json.Unmarshal(sampleOrderAlertJSON, &alert); err != nil {
+	if err := alert.UnmarshalJSON(sampleOrderAlertJSON); err != nil {
 		b.Fatal(err)
 	}
 
@@ -189,7 +202,7 @@ func BenchmarkOrderAlertHelpers(b *testing.B) {
 // BenchmarkOrderAlertIsFilled benchmarks IsFilled check
 func BenchmarkOrderAlertIsFilled(b *testing.B) {
 	var alert orderupdate.OrderAlert
-	if err := json.Unmarshal(sampleOrderAlertJSON, &alert); err != nil {
+	if err := alert.UnmarshalJSON(sampleOrderAlertJSON); err != nil {
 		b.Fatal(err)
 	}
 
@@ -201,7 +214,7 @@ func BenchmarkOrderAlertIsFilled(b *testing.B) {
 	}
 }
 
-// BenchmarkUnmarshalOrderAlertBatch benchmarks parsing multiple alerts
+// BenchmarkUnmarshalOrderAlertBatch benchmarks parsing multiple alerts with easyjson
 func BenchmarkUnmarshalOrderAlertBatch(b *testing.B) {
 	// Create a batch of different alert types
 	alerts := [][]byte{
@@ -216,21 +229,21 @@ func BenchmarkUnmarshalOrderAlertBatch(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, alertJSON := range alerts {
 			var alert orderupdate.OrderAlert
-			if err := json.Unmarshal(alertJSON, &alert); err != nil {
+			if err := alert.UnmarshalJSON(alertJSON); err != nil {
 				b.Fatal(err)
 			}
 		}
 	}
 }
 
-// BenchmarkOrderAlertParseAndCheck benchmarks full parse + check workflow
+// BenchmarkOrderAlertParseAndCheck benchmarks full parse + check workflow with easyjson
 func BenchmarkOrderAlertParseAndCheck(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
 		var alert orderupdate.OrderAlert
-		if err := json.Unmarshal(sampleOrderAlertJSON, &alert); err != nil {
+		if err := alert.UnmarshalJSON(sampleOrderAlertJSON); err != nil {
 			b.Fatal(err)
 		}
 
@@ -245,7 +258,7 @@ func BenchmarkOrderAlertParseAndCheck(b *testing.B) {
 	}
 }
 
-// BenchmarkHighVolumeAlertParsing simulates high-volume alert parsing
+// BenchmarkHighVolumeAlertParsing simulates high-volume alert parsing with easyjson
 func BenchmarkHighVolumeAlertParsing(b *testing.B) {
 	// Create 100 different alerts (simulating varied order updates)
 	alerts := make([][]byte, 100)
@@ -266,7 +279,7 @@ func BenchmarkHighVolumeAlertParsing(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, alertJSON := range alerts {
 			var alert orderupdate.OrderAlert
-			if err := json.Unmarshal(alertJSON, &alert); err != nil {
+			if err := alert.UnmarshalJSON(alertJSON); err != nil {
 				b.Fatal(err)
 			}
 

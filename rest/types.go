@@ -1,5 +1,7 @@
 package rest
 
+//go:generate easyjson -all types.go
+
 // MarketQuoteRequest represents a request for market quote data.
 // Keys are exchange segments (e.g., "NSE_EQ", "NSE_FNO"), values are lists of security IDs.
 // Example: {"NSE_EQ": [11536], "NSE_FNO": [49081, 49082]}

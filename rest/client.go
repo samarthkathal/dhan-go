@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/samarthkathal/dhan-go/internal/limiter"
 	"github.com/samarthkathal/dhan-go/internal/restgen"
@@ -785,8 +786,14 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		// Don't include full response body in error as it may contain sensitive data
-		return nil, fmt.Errorf("request returned status %d", resp.StatusCode)
+		bodySnippet := strings.TrimSpace(string(respBody))
+		if len(bodySnippet) > 512 {
+			bodySnippet = bodySnippet[:512] + "..."
+		}
+		if bodySnippet == "" {
+			return nil, fmt.Errorf("request returned status %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("request returned status %d: %s", resp.StatusCode, bodySnippet)
 	}
 
 	return respBody, nil
@@ -805,7 +812,7 @@ func (c *Client) GetLTP(ctx context.Context, req MarketQuoteRequest) (*LTPRespon
 	}
 
 	var result LTPResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
+	if err := result.UnmarshalJSON(respBody); err != nil {
 		return nil, fmt.Errorf("failed to parse LTP response: %w", err)
 	}
 
@@ -821,7 +828,7 @@ func (c *Client) GetOHLC(ctx context.Context, req MarketQuoteRequest) (*OHLCResp
 	}
 
 	var result OHLCResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
+	if err := result.UnmarshalJSON(respBody); err != nil {
 		return nil, fmt.Errorf("failed to parse OHLC response: %w", err)
 	}
 
@@ -837,7 +844,7 @@ func (c *Client) GetQuote(ctx context.Context, req MarketQuoteRequest) (*QuoteRe
 	}
 
 	var result QuoteResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
+	if err := result.UnmarshalJSON(respBody); err != nil {
 		return nil, fmt.Errorf("failed to parse quote response: %w", err)
 	}
 
@@ -862,7 +869,7 @@ func (c *Client) GetOptionChain(ctx context.Context, underlyingScrip int, underl
 	}
 
 	var result OptionChainResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
+	if err := result.UnmarshalJSON(respBody); err != nil {
 		return nil, fmt.Errorf("failed to parse option chain response: %w", err)
 	}
 
@@ -882,7 +889,7 @@ func (c *Client) GetExpiryList(ctx context.Context, underlyingScrip int, underly
 	}
 
 	var result ExpiryListResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
+	if err := result.UnmarshalJSON(respBody); err != nil {
 		return nil, fmt.Errorf("failed to parse expiry list response: %w", err)
 	}
 

@@ -1,7 +1,6 @@
 package benchmarks
 
 import (
-	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -91,7 +90,7 @@ func BenchmarkE2EOrderUpdateFlow(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		var alert orderupdate.OrderAlert
-		if err := json.Unmarshal(sampleOrderAlertJSON, &alert); err != nil {
+		if err := alert.UnmarshalJSON(sampleOrderAlertJSON); err != nil {
 			b.Fatal(err)
 		}
 		callback(&alert)

@@ -66,10 +66,12 @@ func releaseDepthData(d *DepthData) {
 	if d == nil {
 		return
 	}
-	// Don't put the slice back - let it be GC'd or reused separately
+	if len(d.Entries) > 0 {
+		releaseDepthEntries(d.Entries)
+		d.Entries = nil
+	}
 	d.Header = DepthHeader{}
 	d.IsBid = false
-	d.Entries = nil
 	depthDataPool.Put(d)
 }
 
@@ -83,11 +85,29 @@ func releaseFullDepthData(f *FullDepthData) {
 	if f == nil {
 		return
 	}
+	if len(f.Bids) > 0 {
+		releaseDepthEntries(f.Bids)
+		f.Bids = nil
+	}
+	if len(f.Asks) > 0 {
+		releaseDepthEntries(f.Asks)
+		f.Asks = nil
+	}
 	f.ExchangeSegment = 0
 	f.SecurityID = 0
-	f.Bids = nil
-	f.Asks = nil
 	fullDepthPool.Put(f)
+}
+
+// releaseDepthEntries returns the provided entries slice to the appropriate pool.
+func releaseDepthEntries(entries []DepthEntry) {
+	switch cap(entries) {
+	case 20:
+		releaseEntries20(entries)
+	case 200:
+		releaseEntries200(entries)
+	default:
+		// Non-pooled capacity, drop on the floor.
+	}
 }
 
 // acquireEntries20 gets a pre-allocated 20-entry slice from the pool
@@ -225,6 +245,10 @@ func combineDepthDataPooled(bid, ask *DepthData) *FullDepthData {
 			full.SecurityID = ask.Header.SecurityID
 		}
 		full.Asks = ask.Entries
+		ask.Entries = nil
+	}
+	if bid != nil {
+		bid.Entries = nil
 	}
 	return full
 }

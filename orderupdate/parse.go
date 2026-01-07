@@ -1,7 +1,6 @@
 package orderupdate
 
 import (
-	"encoding/json"
 	"fmt"
 )
 
@@ -13,7 +12,7 @@ import (
 // }
 func ParseOrderAlert(data []byte) (*OrderAlert, error) {
 	var alert OrderAlert
-	if err := json.Unmarshal(data, &alert); err != nil {
+	if err := alert.UnmarshalJSON(data); err != nil {
 		return nil, fmt.Errorf("failed to parse order alert: %w", err)
 	}
 
