@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
+	"runtime"
 	"strings"
 
+	"github.com/rs/zerolog"
 	"github.com/samarthkathal/dhan-go/internal/limiter"
 	"github.com/samarthkathal/dhan-go/internal/restgen"
 )
@@ -21,6 +24,7 @@ type Client struct {
 	httpClient  *http.Client
 	baseURL     string
 	accessToken string
+	logger      *zerolog.Logger
 }
 
 // NewClient creates a new REST API client
@@ -93,7 +97,74 @@ func NewClient(baseURL, accessToken string, httpClient *http.Client, opts ...Opt
 		httpClient:  cfg.httpClient,
 		baseURL:     baseURL,
 		accessToken: accessToken,
+		logger:      cfg.logger,
 	}, nil
+}
+
+// httpResponse is implemented by all generated response types
+type httpResponse interface {
+	StatusCode() int
+}
+
+// logResponse logs API response at debug level if logger is configured
+// Automatically detects caller function name using runtime.Caller
+// Handles nil responses gracefully and extracts Body field via reflection
+func (c *Client) logResponse(resp httpResponse) {
+	if c.logger == nil {
+		return
+	}
+	// Handle nil or typed nil (e.g., (*SomeType)(nil) passed as interface)
+	if resp == nil {
+		return
+	}
+	rv := reflect.ValueOf(resp)
+	if rv.Kind() == reflect.Ptr && rv.IsNil() {
+		return
+	}
+
+	// Get Body field via reflection (all generated response types have Body []byte)
+	var body []byte
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+	}
+	if bodyField := rv.FieldByName("Body"); bodyField.IsValid() {
+		body = bodyField.Bytes()
+	}
+
+	c.logWithCaller(1, resp.StatusCode(), body)
+}
+
+// logRawResponse logs raw HTTP response for manual HTTP methods
+// skip parameter controls how many stack frames to skip for caller detection
+func (c *Client) logRawResponse(skip int, statusCode int, body []byte) {
+	if c.logger == nil {
+		return
+	}
+	c.logWithCaller(skip, statusCode, body)
+}
+
+// logWithCaller is the internal logging implementation
+func (c *Client) logWithCaller(skip int, statusCode int, body []byte) {
+	// Get caller's function name (skip+1 to account for this function)
+	pc, _, _, ok := runtime.Caller(skip + 1)
+	funcName := "unknown"
+	if ok {
+		fn := runtime.FuncForPC(pc)
+		if fn != nil {
+			// Extract just the function name from full path
+			fullName := fn.Name()
+			if idx := strings.LastIndex(fullName, "."); idx != -1 {
+				funcName = fullName[idx+1:]
+			} else {
+				funcName = fullName
+			}
+		}
+	}
+	c.logger.Debug().
+		Str("func", funcName).
+		Int("status", statusCode).
+		RawJSON("body", body).
+		Msg("")
 }
 
 // ============================================================================
@@ -108,42 +179,39 @@ func NewClient(baseURL, accessToken string, httpClient *http.Client, opts ...Opt
 // GetHoldings retrieves user's holdings
 func (c *Client) GetHoldings(ctx context.Context) (*restgen.GetholdingsResult, error) {
 	resp, err := c.gen.GetholdingsWithResponse(ctx, &restgen.GetholdingsParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get holdings failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get holdings returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetPositions retrieves user's positions
 func (c *Client) GetPositions(ctx context.Context) (*restgen.GetpositionsResult, error) {
 	resp, err := c.gen.GetpositionsWithResponse(ctx, &restgen.GetpositionsParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get positions failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get positions returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // ConvertPosition converts a position (e.g., intraday to CNC or vice versa)
 func (c *Client) ConvertPosition(ctx context.Context, req restgen.ConvertpositionJSONRequestBody) (*restgen.ConvertpositionResult, error) {
 	resp, err := c.gen.ConvertpositionWithResponse(ctx, &restgen.ConvertpositionParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("convert position failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("convert position returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -154,98 +222,91 @@ func (c *Client) ConvertPosition(ctx context.Context, req restgen.Convertpositio
 // GetOrders retrieves user's orders
 func (c *Client) GetOrders(ctx context.Context) (*restgen.GetordersResult, error) {
 	resp, err := c.gen.GetordersWithResponse(ctx, &restgen.GetordersParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get orders failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get orders returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetOrderByID retrieves a specific order by order ID
 func (c *Client) GetOrderByID(ctx context.Context, orderID string) (*restgen.GetorderbyorderidResult, error) {
 	resp, err := c.gen.GetorderbyorderidWithResponse(ctx, orderID, &restgen.GetorderbyorderidParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get order by ID failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get order by ID returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetOrderByCorrelationID retrieves an order by correlation ID
 func (c *Client) GetOrderByCorrelationID(ctx context.Context, correlationID string) (*restgen.GetorderbycorrelationidResult, error) {
 	resp, err := c.gen.GetorderbycorrelationidWithResponse(ctx, correlationID, &restgen.GetorderbycorrelationidParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get order by correlation ID failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get order by correlation ID returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // PlaceOrder places a new order
 func (c *Client) PlaceOrder(ctx context.Context, req restgen.PlaceorderJSONRequestBody) (*restgen.PlaceorderResult, error) {
 	resp, err := c.gen.PlaceorderWithResponse(ctx, &restgen.PlaceorderParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("place order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("place order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // ModifyOrder modifies an existing order
 func (c *Client) ModifyOrder(ctx context.Context, orderID string, req restgen.ModifyorderJSONRequestBody) (*restgen.ModifyorderResult, error) {
 	resp, err := c.gen.ModifyorderWithResponse(ctx, orderID, &restgen.ModifyorderParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("modify order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("modify order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // CancelOrder cancels an existing order
 func (c *Client) CancelOrder(ctx context.Context, orderID string) (*restgen.CancelorderResult, error) {
 	resp, err := c.gen.CancelorderWithResponse(ctx, orderID, &restgen.CancelorderParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("cancel order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("cancel order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // PlaceSliceOrder places a slice/basket order (splits large orders)
 func (c *Client) PlaceSliceOrder(ctx context.Context, req restgen.PlacesliceorderJSONRequestBody) (*restgen.PlacesliceorderResult, error) {
 	resp, err := c.gen.PlacesliceorderWithResponse(ctx, &restgen.PlacesliceorderParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("place slice order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("place slice order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -256,56 +317,52 @@ func (c *Client) PlaceSliceOrder(ctx context.Context, req restgen.Placesliceorde
 // GetForeverOrders retrieves all forever/GTT orders
 func (c *Client) GetForeverOrders(ctx context.Context) (*restgen.GetforeverordersResult, error) {
 	resp, err := c.gen.GetforeverordersWithResponse(ctx, &restgen.GetforeverordersParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get forever orders failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get forever orders returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // PlaceForeverOrder places a new forever/GTT order
 func (c *Client) PlaceForeverOrder(ctx context.Context, req restgen.PlaceforeverorderJSONRequestBody) (*restgen.PlaceforeverorderResult, error) {
 	resp, err := c.gen.PlaceforeverorderWithResponse(ctx, &restgen.PlaceforeverorderParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("place forever order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("place forever order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // ModifyForeverOrder modifies an existing forever/GTT order
 func (c *Client) ModifyForeverOrder(ctx context.Context, orderID string, req restgen.ModifyforeverorderJSONRequestBody) (*restgen.ModifyforeverorderResult, error) {
 	resp, err := c.gen.ModifyforeverorderWithResponse(ctx, orderID, &restgen.ModifyforeverorderParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("modify forever order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("modify forever order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // CancelForeverOrder cancels an existing forever/GTT order
 func (c *Client) CancelForeverOrder(ctx context.Context, orderID string) (*restgen.CancelforeverorderResult, error) {
 	resp, err := c.gen.CancelforeverorderWithResponse(ctx, orderID, &restgen.CancelforeverorderParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("cancel forever order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("cancel forever order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -316,70 +373,65 @@ func (c *Client) CancelForeverOrder(ctx context.Context, orderID string) (*restg
 // GetAllAlertOrders retrieves all alert orders
 func (c *Client) GetAllAlertOrders(ctx context.Context) (*restgen.GetAllAlertOrdersResult, error) {
 	resp, err := c.gen.GetAllAlertOrdersWithResponse(ctx, &restgen.GetAllAlertOrdersParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get all alert orders failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get all alert orders returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetAlertOrder retrieves a specific alert order by ID
 func (c *Client) GetAlertOrder(ctx context.Context, alertID string) (*restgen.GetAlertOrderResult, error) {
 	resp, err := c.gen.GetAlertOrderWithResponse(ctx, alertID, &restgen.GetAlertOrderParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get alert order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get alert order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // PlaceAlertOrder places a new alert order
 func (c *Client) PlaceAlertOrder(ctx context.Context, req restgen.AlertOrderJSONRequestBody) (*restgen.AlertOrderResult, error) {
 	resp, err := c.gen.AlertOrderWithResponse(ctx, &restgen.AlertOrderParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("place alert order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("place alert order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // ModifyAlertOrder modifies an existing alert order
 func (c *Client) ModifyAlertOrder(ctx context.Context, alertID string, req restgen.ModifyAlertOrderJSONRequestBody) (*restgen.ModifyAlertOrderResult, error) {
 	resp, err := c.gen.ModifyAlertOrderWithResponse(ctx, alertID, &restgen.ModifyAlertOrderParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("modify alert order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("modify alert order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // DeleteAlertOrder deletes an alert order
 func (c *Client) DeleteAlertOrder(ctx context.Context, alertID string) (*restgen.DelAlertOrderResult, error) {
 	resp, err := c.gen.DelAlertOrderWithResponse(ctx, alertID, &restgen.DelAlertOrderParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("delete alert order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("delete alert order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -390,42 +442,39 @@ func (c *Client) DeleteAlertOrder(ctx context.Context, alertID string) (*restgen
 // GetSuperOrders retrieves all super/bracket orders
 func (c *Client) GetSuperOrders(ctx context.Context) (*restgen.GetsuperordersResult, error) {
 	resp, err := c.gen.GetsuperordersWithResponse(ctx, &restgen.GetsuperordersParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get super orders failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get super orders returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // PlaceSuperOrder places a new super/bracket order
 func (c *Client) PlaceSuperOrder(ctx context.Context, req restgen.PlacesuperorderJSONRequestBody) (*restgen.PlacesuperorderResult, error) {
 	resp, err := c.gen.PlacesuperorderWithResponse(ctx, &restgen.PlacesuperorderParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("place super order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("place super order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // ModifySuperOrder modifies an existing super/bracket order
 func (c *Client) ModifySuperOrder(ctx context.Context, orderID string, req restgen.ModifysuperorderJSONRequestBody) (*restgen.ModifysuperorderResult, error) {
 	resp, err := c.gen.ModifysuperorderWithResponse(ctx, orderID, &restgen.ModifysuperorderParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("modify super order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("modify super order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -433,14 +482,13 @@ func (c *Client) ModifySuperOrder(ctx context.Context, orderID string, req restg
 // orderLeg specifies which leg to cancel (e.g., "ENTRY_LEG", "TARGET_LEG", "STOP_LOSS_LEG")
 func (c *Client) CancelSuperOrder(ctx context.Context, orderID string, orderLeg string) (*restgen.CancelsuperorderResult, error) {
 	resp, err := c.gen.CancelsuperorderWithResponse(ctx, orderID, restgen.CancelsuperorderParamsOrderLeg(orderLeg), &restgen.CancelsuperorderParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("cancel super order failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("cancel super order returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -451,42 +499,39 @@ func (c *Client) CancelSuperOrder(ctx context.Context, orderID string, orderLeg 
 // GetAllTrades retrieves all trades for today
 func (c *Client) GetAllTrades(ctx context.Context) (*restgen.GetalltradesResult, error) {
 	resp, err := c.gen.GetalltradesWithResponse(ctx, &restgen.GetalltradesParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get all trades failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get all trades returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetTradeHistory retrieves paginated trade history
 func (c *Client) GetTradeHistory(ctx context.Context, fromDate, toDate string, pageNumber string) (*restgen.GettradehistoryResult, error) {
 	resp, err := c.gen.GettradehistoryWithResponse(ctx, fromDate, toDate, pageNumber, &restgen.GettradehistoryParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get trade history failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get trade history returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetTradesByOrderID retrieves trades for a specific order
 func (c *Client) GetTradesByOrderID(ctx context.Context, orderID string) (*restgen.GettradebyorderidResult, error) {
 	resp, err := c.gen.GettradebyorderidWithResponse(ctx, orderID, &restgen.GettradebyorderidParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get trades by order ID failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get trades by order ID returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -497,14 +542,13 @@ func (c *Client) GetTradesByOrderID(ctx context.Context, orderID string) (*restg
 // GetFundLimits retrieves fund limits
 func (c *Client) GetFundLimits(ctx context.Context) (*restgen.FundlimitResult, error) {
 	resp, err := c.gen.FundlimitWithResponse(ctx, &restgen.FundlimitParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get fund limits failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get fund limits returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -514,28 +558,26 @@ func (c *Client) GetLedger(ctx context.Context, fromDate, toDate string) (*restg
 		FromDate: &fromDate,
 		ToDate:   &toDate,
 	})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get ledger failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get ledger returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // CalculateMargin calculates margin requirements for an order
 func (c *Client) CalculateMargin(ctx context.Context, req restgen.MargincalculatorJSONRequestBody) (*restgen.MargincalculatorResult, error) {
 	resp, err := c.gen.MargincalculatorWithResponse(ctx, &restgen.MargincalculatorParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("calculate margin failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("calculate margin returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -546,42 +588,39 @@ func (c *Client) CalculateMargin(ctx context.Context, req restgen.Margincalculat
 // GetHistoricalData retrieves daily historical OHLC data for a security
 func (c *Client) GetHistoricalData(ctx context.Context, req restgen.HistoricalchartsJSONRequestBody) (*restgen.HistoricalchartsResult, error) {
 	resp, err := c.gen.HistoricalchartsWithResponse(ctx, &restgen.HistoricalchartsParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get historical data failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get historical data returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetIntradayData retrieves intraday OHLC data for a security
 func (c *Client) GetIntradayData(ctx context.Context, req restgen.IntradaychartsJSONRequestBody) (*restgen.IntradaychartsResult, error) {
 	resp, err := c.gen.IntradaychartsWithResponse(ctx, &restgen.IntradaychartsParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get intraday data failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get intraday data returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetExpiredOptionsData retrieves historical data for expired options on a rolling basis
 func (c *Client) GetExpiredOptionsData(ctx context.Context, req restgen.OptionchartJSONRequestBody) (*restgen.OptionchartResult, error) {
 	resp, err := c.gen.OptionchartWithResponse(ctx, &restgen.OptionchartParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get expired options data failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get expired options data returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -592,14 +631,13 @@ func (c *Client) GetExpiredOptionsData(ctx context.Context, req restgen.Optionch
 // GetKillSwitchStatus retrieves the current kill switch status
 func (c *Client) GetKillSwitchStatus(ctx context.Context) (*restgen.KillSwitchStatusResult, error) {
 	resp, err := c.gen.KillSwitchStatusWithResponse(ctx, &restgen.KillSwitchStatusParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get kill switch status failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get kill switch status returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -607,14 +645,13 @@ func (c *Client) GetKillSwitchStatus(ctx context.Context) (*restgen.KillSwitchSt
 // status should be "ACTIVATE" or "DEACTIVATE"
 func (c *Client) SetKillSwitch(ctx context.Context, status string) (*restgen.KillswitchResult, error) {
 	resp, err := c.gen.KillswitchWithResponse(ctx, &restgen.KillswitchParams{KillSwitchStatus: status})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("set kill switch failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("set kill switch returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -625,56 +662,52 @@ func (c *Client) SetKillSwitch(ctx context.Context, status string) (*restgen.Kil
 // SubmitEDISForm submits an EDIS form for holdings sell
 func (c *Client) SubmitEDISForm(ctx context.Context, req restgen.EdisformJSONRequestBody) (*restgen.EdisformResult, error) {
 	resp, err := c.gen.EdisformWithResponse(ctx, &restgen.EdisformParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("submit EDIS form failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("submit EDIS form returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // SubmitBulkEDISForm submits bulk EDIS forms
 func (c *Client) SubmitBulkEDISForm(ctx context.Context, req restgen.BulkedisformJSONRequestBody) (*restgen.BulkedisformResult, error) {
 	resp, err := c.gen.BulkedisformWithResponse(ctx, &restgen.BulkedisformParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("submit bulk EDIS form failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("submit bulk EDIS form returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetEDISQuantityStatus retrieves EDIS quantity status for an ISIN
 func (c *Client) GetEDISQuantityStatus(ctx context.Context, isin string) (*restgen.EdisqtystatusResult, error) {
 	resp, err := c.gen.EdisqtystatusWithResponse(ctx, isin, &restgen.EdisqtystatusParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get EDIS quantity status failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get EDIS quantity status returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // GetEDISTPIN retrieves EDIS T-PIN inquiry form
 func (c *Client) GetEDISTPIN(ctx context.Context) (*restgen.EdistpinResult, error) {
 	resp, err := c.gen.EdistpinWithResponse(ctx, &restgen.EdistpinParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get EDIS TPIN failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get EDIS TPIN returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -685,42 +718,39 @@ func (c *Client) GetEDISTPIN(ctx context.Context) (*restgen.EdistpinResult, erro
 // GetIP retrieves registered IP addresses
 func (c *Client) GetIP(ctx context.Context) (*restgen.GetIPResult, error) {
 	resp, err := c.gen.GetIPWithResponse(ctx, &restgen.GetIPParams{})
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("get IP failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("get IP returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // SetIP sets the primary and secondary IP addresses
 func (c *Client) SetIP(ctx context.Context, req restgen.SetIPJSONRequestBody) (*restgen.SetIPResult, error) {
 	resp, err := c.gen.SetIPWithResponse(ctx, &restgen.SetIPParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("set IP failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("set IP returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
 // ModifyIP modifies the registered IP addresses
 func (c *Client) ModifyIP(ctx context.Context, req restgen.ModifyIPJSONRequestBody) (*restgen.ModifyIPResult, error) {
 	resp, err := c.gen.ModifyIPWithResponse(ctx, &restgen.ModifyIPParams{}, req)
+	c.logResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("modify IP failed: %w", err)
 	}
-
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("modify IP returned status %d", resp.StatusCode())
 	}
-
 	return resp, nil
 }
 
@@ -784,6 +814,9 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
+
+	// skip=2: logRawResponse -> doRequest -> actual caller
+	c.logRawResponse(2, resp.StatusCode, respBody)
 
 	if resp.StatusCode != http.StatusOK {
 		bodySnippet := strings.TrimSpace(string(respBody))

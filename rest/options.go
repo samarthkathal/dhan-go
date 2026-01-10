@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/samarthkathal/dhan-go/internal/limiter"
 	"github.com/samarthkathal/dhan-go/internal/restgen"
 )
@@ -16,6 +17,7 @@ type clientConfig struct {
 	httpClient    *http.Client
 	requestEditor restgen.RequestEditorFn
 	rateLimiter   *limiter.HTTPRateLimiter
+	logger        *zerolog.Logger
 }
 
 // Option is a functional option for configuring the REST client
@@ -81,5 +83,13 @@ func SecureHTTPClient() *http.Client {
 func WithSecureDefaults() Option {
 	return func(cfg *clientConfig) {
 		cfg.httpClient = SecureHTTPClient()
+	}
+}
+
+// WithLogger sets a zerolog logger for debug logging of API responses
+// When enabled, logs each response with function name, status code, and body
+func WithLogger(logger *zerolog.Logger) Option {
+	return func(cfg *clientConfig) {
+		cfg.logger = logger
 	}
 }
